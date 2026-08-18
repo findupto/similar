@@ -6,7 +6,46 @@ export const SEED_SUPPLIERS=[];
 export const SEED_STAFF=[];
 export const STORAGE_KEY='findupto-pos-v3';
 export const loadState=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch{return {}}};
-export const saveState=s=>localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
+
+// A deal is a real stock recipe.  When a deal sale is saved, each recipe
+// component is deducted from its own inventory and the deal product's
+// synthetic stock is recalculated from the component availability.
+export const saveState=s=>{
+  try{
+    const previous=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
+    const previousSaleIds=new Set((previous.sales||[]).map(x=>x.id));
+    const products=s.products||[];
+    const deals=s.deals||[];
+    const newSales=(s.sales||[]).filter(x=>!previousSaleIds.has(x.id));
+    const applied=[];
+    for(const sale of newSales){
+      for(const item of (sale.items||[])){
+        const dealProduct=products.find(p=>p.id===item.productId&&p.isDeal&&p.dealComponents);
+        if(!dealProduct) continue;
+        const qty=Number(item.qty)||0;
+        const components=dealProduct.dealComponents||[];
+        item.components=components.map(c=>({...c,quantity:(Number(c.quantity)||0)*qty}));
+        for(const c of components){
+          const p=products.find(x=>x.id===c.productId);
+          if(p) p.stock=Math.max(0,(Number(p.stock)||0)-((Number(c.quantity)||0)*qty));
+        }
+        applied.push({saleId:sale.id,dealId:dealProduct.dealId,deal:dealProduct.name,quantity:qty,components:item.components});
+      }
+    }
+    // Recalculate the available quantity of every synthetic deal from its recipe.
+    for(const p of products.filter(x=>x.isDeal&&x.dealComponents)){
+      p.stock=p.dealComponents.length?Math.max(0,...p.dealComponents.map(c=>{const source=products.find(x=>x.id===c.productId);const q=Number(c.quantity)||1;return source?Math.floor((Number(source.stock)||0)/q):0})):0;
+    }
+    s.inventoryMoves=s.inventoryMoves||[];
+    for(const x of applied){
+      for(const c of x.components){
+        s.inventoryMoves.push({id:uid('MOV'),date:today(),type:'DEAL_COMPONENT_SALE',productId:c.productId,product:c.name,qty:-c.quantity,reference:x.saleId,deal:x.deal,by:'POS'});
+      }
+    }
+    if(applied.length) s.audit=[...(s.audit||[]),...applied.map(x=>({id:uid('AUD'),date:today(),action:`Deal ${x.deal} stock recipe applied to ${x.saleId}`,by:'POS'}))];
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
+  }catch(e){localStorage.setItem(STORAGE_KEY,JSON.stringify(s));}
+};
 export const money=n=>`${DEFAULT_BUSINESS.currency} ${Number(n||0).toLocaleString()}`;
 export const csvEscape=v=>`"${String(v??'').replaceAll('"','""')}"`;
 export const productsToCSV=products=>[['name','sku','barcode','category','cost','price','tax','stock','status'],...products.map(p=>[p.name,p.sku,p.barcode,p.category,p.cost,p.price,p.tax,p.stock,p.active?'active':'inactive'])].map(r=>r.map(csvEscape).join(',')).join('\n');
