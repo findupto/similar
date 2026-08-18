@@ -1,8 +1,9 @@
 {
   "name":"mk-pizza-pos",
   "private":true,
-  "version":"2.1.0",
+  "version":"2.1.1",
   "description":"Standalone POS for MK Pizza & Ice Bar",
+  "author":"Findupto",
   "type":"module",
   "main":"electron/main.cjs",
   "scripts":{
@@ -12,7 +13,10 @@
     "electron:dev":"concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "dist":"npm run build && electron-builder --win nsis portable",
     "dist:portable":"npm run build && electron-builder --win portable",
-    "dist:installer":"npm run build && electron-builder --win nsis"
+    "dist:installer":"npm run build && electron-builder --win nsis",
+    "dist:x64":"npm run build && electron-builder --win nsis portable --x64",
+    "dist:ia32":"npm run build && electron-builder --win nsis portable --ia32",
+    "dist:arm64":"npm run build && electron-builder --win nsis portable --arm64"
   },
   "dependencies":{"lucide-react":"latest","react":"latest","react-dom":"latest"},
   "devDependencies":{"concurrently":"latest","electron":"latest","electron-builder":"latest","vite":"latest","wait-on":"latest"},
@@ -24,11 +28,7 @@
     "files":["dist/**/*","electron/**/*","package.json"],
     "directories":{"output":"release"},
     "win":{
-      "target":[
-        {"target":"nsis","arch":["x64","ia32","arm64"]},
-        {"target":"portable","arch":["x64","ia32","arm64"]}
-      ],
-      "publisherName":"Findupto"
+      "target":["nsis","portable"]
     },
     "nsis":{
       "oneClick":false,
