@@ -1,48 +1,78 @@
 const KEY = 'mkpos:last-printer';
+const THEME_KEY = 'mkpos:receipt-theme';
 
-function escPosReceipt({ business, address, phone, invoice, date, customer, items, subtotal, discount, total, method, paid, change }) {
-  const line = '--------------------------------';
+export const RECEIPT_THEMES = {
+  classic: { name: 'Classic 80mm', width: 48, divider: '------------------------------------------------' },
+  modern: { name: 'Modern 80mm', width: 48, divider: '================================================' },
+  compact: { name: 'Compact 80mm', width: 48, divider: '----------------------------------------' }
+};
+
+const fit = (value, width) => String(value ?? '').slice(0, width);
+const moneyLine = (label, value, width) => `${label}${Number(value || 0).toFixed(2).padStart(Math.max(1, width - label.length))}`;
+
+function escPosReceipt({ business, address, phone, invoice, date, customer, items, subtotal, discount = 0, total, method, paid, change, theme = 'classic' }) {
+  const t = RECEIPT_THEMES[theme] || RECEIPT_THEMES.classic;
+  const w = t.width;
   const center = s => `\x1b\x61\x01${s}\x1b\x61\x00`;
-  let out = '\x1b\x40';
-  out += center(`\x1b\x45\x01${business}\x1b\x45\x00\n`);
-  out += center(`${address}\n${phone}\n`);
-  out += `${line}\nInvoice: ${invoice}\n${date}\nCustomer: ${customer}\n${line}\n`;
-  for (const i of items) out += `${String(i.qty).padStart(2)} x ${i.name.slice(0,22).padEnd(22)} ${Number(i.total).toFixed(2).padStart(7)}\n`;
-  out += `${line}\nSubtotal: ${Number(subtotal).toFixed(2).padStart(18)}\nDiscount: ${Number(discount).toFixed(2).padStart(18)}\n`;
-  out += `TOTAL ${Number(total).toFixed(2).padStart(21)}\nPayment: ${method}\nPaid: ${Number(paid).toFixed(2)}\nChange: ${Number(change).toFixed(2)}\n${line}\n`;
-  out += center('Thank you!\n\n\n') + '\x1d\x56\x00';
+  let out = '\x1b\x40\x1b\x21\x00';
+  out += center(`\x1b\x45\x01${fit(business, w)}\x1b\x45\x00\n`);
+  out += center(`${fit(address, w)}\n${fit(phone, w)}\n`);
+  out += `${t.divider}\nInvoice: ${invoice}\n${date}\nCustomer: ${fit(customer, w - 10)}\n${t.divider}\n`;
+  for (const i of items || []) {
+    const name = fit(i.name, 27);
+    const qty = String(i.qty).padStart(2);
+    const amount = Number(i.total || 0).toFixed(2).padStart(9);
+    out += `${qty} x ${name.padEnd(27)}${amount}\n`;
+  }
+  out += `${t.divider}\n${moneyLine('Subtotal:', subtotal, w)}\n${moneyLine('Discount:', discount, w)}\n`;
+  out += `${'TOTAL'.padEnd(w - 12)}${Number(total || 0).toFixed(2).padStart(12)}\n`;
+  out += `Payment: ${method}\n${moneyLine('Paid:', paid, w)}\n${moneyLine('Change:', change, w)}\n${t.divider}\n`;
+  out += center(theme === 'modern' ? 'Thank you for visiting!\n' : 'Thank you!\n');
+  out += '\n\n\x1d\x56\x00';
   return out;
 }
 
 export const PrinterBridge = {
   async discover() {
-    if (window.mkPosDesktop?.discoverPrinters) return window.mkPosDesktop.discoverPrinters();
+    if (window.mkPosDesktop?.discoverPrinters) {
+      const printers = await window.mkPosDesktop.discoverPrinters();
+      return printers.length ? printers : [{ id: 'system', name: 'System Printer', type: 'Browser fallback' }];
+    }
     return [{ id: 'system', name: 'System Printer', type: 'Browser fallback' }];
   },
   async reconnect() {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!saved) return null;
     const list = await this.discover();
-    return list.find(p => p.id === saved.id || p.port === saved.port) || null;
+    return list.find(p => p.id === saved.id || p.port === saved.port || p.name === saved.name) || null;
   },
   async connect(printer) {
-    localStorage.setItem(KEY, JSON.stringify(printer));
-    return printer;
+    const value = { ...printer, connectedAt: Date.now() };
+    localStorage.setItem(KEY, JSON.stringify(value));
+    return value;
   },
   async test(printer) {
-    if (window.mkPosDesktop?.printEscPos && printer.port) return window.mkPosDesktop.printEscPos({ port: printer.port, data: '\x1b\x40\x1b\x45\x01MK Pizza POS\x1b\x45\x00\nPrinter test OK\n\n\x1d\x56\x00' });
+    if (window.mkPosDesktop?.printEscPos && printer?.port?.toUpperCase().startsWith('COM')) {
+      return window.mkPosDesktop.printEscPos({ port: printer.port, data: '\x1b\x40\x1b\x45\x01MK Pizza POS\x1b\x45\x00\n80mm Printer Test OK\n\n\x1d\x56\x00' });
+    }
     window.print();
-    return { ok: true };
+    return { ok: true, fallback: true };
   },
   async print(receipt, printer) {
+    const savedTheme = localStorage.getItem(THEME_KEY) || printer?.theme || 'classic';
     const target = printer?.port ? printer : await this.reconnect();
-    const data = escPosReceipt(receipt);
-    if (window.mkPosDesktop?.printEscPos && target?.port) {
+    const data = escPosReceipt({ ...receipt, theme: savedTheme });
+    if (window.mkPosDesktop?.printEscPos && target?.port?.toUpperCase().startsWith('COM')) {
       const result = await window.mkPosDesktop.printEscPos({ port: target.port, data });
       if (result?.ok) return result;
     }
-    // Universal fallback: use the OS/browser print dialog if no native printer is available.
     window.print();
     return { ok: true, fallback: true };
-  }
+  },
+  setTheme(theme) {
+    const value = RECEIPT_THEMES[theme] ? theme : 'classic';
+    localStorage.setItem(THEME_KEY, value);
+    return value;
+  },
+  getTheme() { return localStorage.getItem(THEME_KEY) || 'classic'; }
 };
