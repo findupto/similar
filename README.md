@@ -1,53 +1,54 @@
-# Findupto POS
+# MK Pizza & Ice Bar POS
 
-A modern retail POS foundation for the `findupto/similar` project. The product direction combines the practical POS workflows found in Enerpize, Nextar and Zoho POS while using original UI/code and a modular architecture.
+Standalone Windows restaurant POS rebuilt for fast counter service and desktop touch/mouse use.
 
-## Included now
-- POS checkout with product search, barcode/SKU-ready catalog, categories and cart
-- Quantity controls, item removal, customer selection and payment flow
-- Inventory deduction after completed sales
-- Dashboard, products, inventory, customers, purchases, sales, accounting, reports and settings workspaces
-- Low-stock indicators, inventory value, cash/receivable/payable KPI cards
-- Responsive desktop/tablet/mobile layout
-- Online/offline-ready product architecture (offline persistence/backend sync is next)
+## Included
+- Role-based login: Admin, Owner, Cashier, Accountant
+- Fast POS checkout with search, categories, stock control and payment methods
+- Product/Menu management with CSV export
+- Inventory, Customers, Sales, Accounting and Reports modules
+- Business settings with MK Pizza & Ice Bar defaults
+- Local browser storage for offline-first operation
+- Thermal receipt printing with ESC/POS output
+- Live Windows COM/Bluetooth thermal-printer discovery
+- Remembers the last selected printer and attempts automatic reconnect
+- Browser/system print fallback when no native printer is available
+- Responsive UI for large desktops, laptops and smaller screens
+- Electron standalone Windows application
+- NSIS installer and portable build for x64, x86 and ARM64 Windows
 
-## Product scope
-The target platform is an all-in-one POS/ERP rather than only a cash register. Planned modules include:
+## Default login
+| Username | Role | Password |
+|---|---|---|
+| admin | Admin | `0099` |
+| owner | Owner | `0099` |
+| cashier | Cashier | `0099` |
+| accountant | Accountant | `0099` |
 
-### Sales & POS
-POS terminal, quotes, invoices, returns, refunds/store credit, discounts, promotions, price lists, installments, split payments, order sources, receipts, keyboard shortcuts, cash sessions, cash-in/out, shifts and commissions.
+## Business defaults
+- Business: MK Pizza & Ice Bar
+- Address: Collage Road Abbas Chowk, Bhakkar, Pakistan
+- Phone: 0316 9700025
+- Currency: Rs.
+- Tax: 0%
 
-### Inventory & purchasing
-Products, variants, units of measure, barcode, serial/lot/expiry tracking, stock transfers, adjustments, stocktaking, requisitions, warehouses, purchase orders, supplier invoices, supplier payments, reorder alerts and inventory valuation.
-
-### Customers & loyalty
-Customer directory, purchase history, credit/debt, loyalty points, store credit, customer groups and targeted promotions.
-
-### Accounting
-Chart of accounts, journal entries, general ledger, cash/bank accounts, expenses, taxes, receivables, payables, cost centers, assets and financial reports.
-
-### Workforce & administration
-Users, roles, granular permissions, shifts, employee performance, multi-store access, audit logs and approval workflows.
-
-### Reporting
-Sales, profit, tax, inventory, purchasing, customer, cashier, payment, product/category/brand and financial dashboards with export/scheduling support.
-
-### Platform
-Multi-location, cloud sync, offline-first POS queue, hardware adapters for barcode scanners/printers/cash drawers/scales, API, import/export, notifications, backups and configurable business settings.
-
-## Reference feature research
-The scope is informed by public feature descriptions from Enerpize and Zoho POS, including offline POS, barcode/hardware support, inventory/accounting/CRM integration, multi-location, loyalty, shifts, cash sessions and reporting. Nextar's public positioning also covers POS, inventory, cash register, customers, online catalog, sales and reports.
-
-## Run
+## Development
 ```bash
 npm install
 npm run dev
 ```
 
-## Next engineering phase
-1. Add a real API/database (PostgreSQL + authentication + tenant/store model).
-2. Persist POS transactions and implement offline sync/conflict handling.
-3. Build inventory, purchasing, customer, accounting and reporting CRUD APIs.
-4. Add printer/barcode/cash-drawer integrations behind hardware adapters.
-5. Add permissions, audit trail, taxes, returns/refunds and accounting journals.
-6. Add automated tests and CI before production deployment.
+Desktop development:
+```bash
+npm run electron:dev
+```
+
+Build Windows installer + portable package:
+```bash
+npm run dist
+```
+
+The GitHub Actions workflow also builds Windows x64, x86 and ARM64 artifacts from `main`.
+
+## Bluetooth thermal printers
+Pair the printer in Windows first. Most Bluetooth receipt printers expose a Windows COM port. The Electron bridge discovers available COM ports, lets the operator connect/test one, stores the last printer locally, and retries that printer when the POS starts. ESC/POS is sent at 9600 baud by default. If a printer is unavailable, the POS falls back to the normal Windows print flow.
