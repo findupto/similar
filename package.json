@@ -1,7 +1,7 @@
 {
   "name":"mk-pizza-pos",
   "private":true,
-  "version":"2.1.1",
+  "version":"2.1.2",
   "description":"Standalone POS for MK Pizza & Ice Bar",
   "author":"Findupto",
   "type":"module",
@@ -11,12 +11,15 @@
     "web:dev":"vite --host 127.0.0.1",
     "build":"vite build",
     "electron:dev":"concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "dist":"npm run build && electron-builder --win nsis portable",
+    "dist":"npm run build && electron-builder --win nsis",
     "dist:portable":"npm run build && electron-builder --win portable",
     "dist:installer":"npm run build && electron-builder --win nsis",
-    "dist:x64":"npm run build && electron-builder --win nsis portable --x64",
-    "dist:ia32":"npm run build && electron-builder --win nsis portable --ia32",
-    "dist:arm64":"npm run build && electron-builder --win nsis portable --arm64"
+    "dist:x64":"npm run build && electron-builder --win nsis --x64",
+    "dist:portable:x64":"npm run build && electron-builder --win portable --x64",
+    "dist:ia32":"npm run build && electron-builder --win nsis --ia32",
+    "dist:portable:ia32":"npm run build && electron-builder --win portable --ia32",
+    "dist:arm64":"npm run build && electron-builder --win nsis --arm64",
+    "dist:portable:arm64":"npm run build && electron-builder --win portable --arm64"
   },
   "dependencies":{"lucide-react":"latest","react":"latest","react-dom":"latest"},
   "devDependencies":{"concurrently":"latest","electron":"latest","electron-builder":"latest","vite":"latest","wait-on":"latest"},
@@ -28,15 +31,19 @@
     "files":["dist/**/*","electron/**/*","package.json"],
     "directories":{"output":"release"},
     "win":{
-      "target":["nsis","portable"]
+      "target":"nsis"
     },
     "nsis":{
+      "artifactName":"MK-Pizza-POS-${version}-${arch}-Setup.exe",
       "oneClick":false,
       "perMachine":false,
       "allowToChangeInstallationDirectory":true,
       "createDesktopShortcut":true,
       "createStartMenuShortcut":true,
       "shortcutName":"MK Pizza POS"
+    },
+    "portable":{
+      "artifactName":"MK-Pizza-POS-${version}-${arch}-Portable.exe"
     }
   }
 }
