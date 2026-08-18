@@ -1,9 +1,13 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 
-let win;
 const isDev = !app.isPackaged;
+const isDebug = process.argv.includes('--debug');
+let win;
+
+if (isDebug) app.commandLine.appendSwitch('enable-logging');
 
 function powershell(script) {
   return new Promise((resolve) => {
@@ -40,6 +44,12 @@ async function listWindowsPrinters() {
   });
 }
 
+function showLoadError(details) {
+  if (!win || win.isDestroyed()) return;
+  const safe = String(details || 'Unknown renderer error').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  win.loadURL(`data:text/html;charset=utf-8,<!doctype html><html><body style="font-family:Segoe UI;padding:40px;background:#f6f7fb;color:#222"><h2>MK Pizza & Ice Bar POS could not load</h2><p>${safe}</p><p>Run the application with <b>--debug</b> to open diagnostics.</p></body></html>`);
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440,
@@ -56,7 +66,29 @@ function createWindow() {
     }
   });
 
-  // Electron cancels Web Bluetooth requests unless this event is handled.
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (isDebug) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`POS renderer exited: ${details.reason || 'unknown'} ${details.exitCode ?? ''}`);
+    if (!isDebug) showLoadError(`Renderer process exited: ${details.reason || 'unknown'}`);
+  });
+
+  win.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
+    console.error(`POS failed to load: ${code} ${description} ${validatedURL || ''}`);
+    if (!isDev) showLoadError(`${code} ${description}<br><small>${validatedURL || ''}</small>`);
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    if (isDebug) {
+      console.log(`POS loaded: ${win.webContents.getURL()}`);
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
+
+  win.once('ready-to-show', () => win.show());
+
   win.webContents.on('select-bluetooth-device', (event, devices, callback) => {
     event.preventDefault();
     const device = devices.find(d => d.deviceName && d.deviceName.trim()) || devices[0];
@@ -64,19 +96,11 @@ function createWindow() {
   });
 
   win.webContents.session.setBluetoothPairingHandler((_details, callback) => {
-    // Most thermal printers are already paired in Windows. If Windows requests
-    // a pairing confirmation/PIN, accept the system pairing request.
     callback({ confirmed: true });
-  });
-
-  win.once('ready-to-show', () => win.show());
-  win.webContents.on('did-fail-load', (_event, code, description) => {
-    if (isDev) console.error(`POS failed to load: ${code} ${description}`);
   });
 
   if (isDev) {
     win.loadURL('http://127.0.0.1:5173').catch(() => {
-      // electron:dev starts Vite before Electron; this retry also handles a slow startup.
       let attempts = 0;
       const retry = setInterval(() => {
         attempts += 1;
@@ -86,7 +110,11 @@ function createWindow() {
       }, 500);
     });
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    const renderer = path.join(__dirname, '..', 'dist', 'index.html');
+    const rendererUrl = pathToFileURL(renderer).href;
+    console.log(`POS renderer: ${renderer}`);
+    console.log(`POS renderer URL: ${rendererUrl}`);
+    win.loadURL(rendererUrl).catch(err => showLoadError(err.message));
   }
 }
 
