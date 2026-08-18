@@ -1,0 +1,24 @@
+name: Build Windows POS
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, ia32, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run build
+      - run: npx electron-builder --win nsis portable --${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mk-pizza-pos-windows-${{ matrix.arch }}
+          path: release/*
