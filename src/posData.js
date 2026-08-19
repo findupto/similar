@@ -5,36 +5,21 @@ export const SEED_CUSTOMERS=[{id:'C-001',name:'Walk-in Customer',phone:'',email:
 export const SEED_SUPPLIERS=[];
 export const SEED_STAFF=[];
 export const STORAGE_KEY='findupto-pos-v3';
-export const loadState=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch{return {}}};
-export const saveState=s=>{
-  try{
-    const previous=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');
-    const previousSaleIds=new Set((previous.sales||[]).map(x=>x.id));
-    const products=s.products||[];
-    const newSales=(s.sales||[]).filter(x=>!previousSaleIds.has(x.id));
-    const applied=[];
-    for(const sale of newSales){
-      for(const item of (sale.items||[])){
-        const dealProduct=products.find(p=>p.id===item.productId&&p.isDeal&&p.dealComponents);
-        if(!dealProduct) continue;
-        const qty=Number(item.qty)||0;
-        const components=dealProduct.dealComponents||[];
-        item.components=components.map(c=>({...c,quantity:(Number(c.quantity)||0)*qty}));
-        for(const c of components){const p=products.find(x=>x.id===c.productId);if(p)p.stock=Math.max(0,(Number(p.stock)||0)-((Number(c.quantity)||0)*qty));}
-        applied.push({saleId:sale.id,dealId:dealProduct.dealId,deal:dealProduct.name,quantity:qty,components:item.components});
-      }
-    }
-    for(const p of products.filter(x=>x.isDeal&&x.dealComponents))p.stock=p.dealComponents.length?Math.max(0,...p.dealComponents.map(c=>{const source=products.find(x=>x.id===c.productId);const q=Number(c.quantity)||1;return source?Math.floor((Number(source.stock)||0)/q):0})):0;
-    s.inventoryMoves=s.inventoryMoves||[];
-    for(const x of applied)for(const c of x.components)s.inventoryMoves.push({id:uid('MOV'),date:today(),type:'DEAL_COMPONENT_SALE',productId:c.productId,product:c.name,qty:-c.quantity,reference:x.saleId,deal:x.deal,by:'POS'});
-    if(applied.length)s.audit=[...(s.audit||[]),...applied.map(x=>({id:uid('AUD'),date:today(),action:`Deal ${x.deal} stock recipe applied to ${x.saleId}`,by:'POS'}))];
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(s));
-  }catch(e){localStorage.setItem(STORAGE_KEY,JSON.stringify(s));}
-};
-export const money=n=>`${DEFAULT_BUSINESS.currency} ${Number(n||0).toLocaleString()}`;
-export const csvEscape=v=>`"${String(v??'').replaceAll('"','""')}"`;
-export const productsToCSV=products=>[['name','sku','barcode','category','cost','price','tax','stock','status','type','isDeal','dealComponents','bundlePrice'],...products.map(p=>[p.name,p.sku,p.barcode,p.category,p.cost,p.price,p.tax,p.stock,p.active?'active':'inactive',p.isDeal?'deal':'product',p.isDeal?'yes':'no',p.isDeal?(p.dealComponents||[]).map(c=>`${c.sku||c.name||c.productId} x${c.quantity}`).join(' + '):'',p.isDeal?p.price:''])].map(r=>r.map(csvEscape).join(',')).join('\n');
-export function parseCSV(text){const rows=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&q&&n==='"'){cell+='"';i++;continue}if(c==='"'){q=!q;continue}if(c===','&&!q){row.push(cell);cell='';continue}if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);if(row.some(Boolean))rows.push(row);row=[];cell='';continue}cell+=c}if(cell||row.length){row.push(cell);rows.push(row)}return rows}
-export const downloadText=(name,text,type='text/csv')=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)};
 export const uid=p=>`${p}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 export const today=()=>new Date().toLocaleString();
+export const money=n=>`${DEFAULT_BUSINESS.currency} ${Number(n||0).toLocaleString()}`;
+export const normalizeRecipe=(recipe=[])=>Array.isArray(recipe)?recipe.map(r=>({ingredientId:r.ingredientId||r.productId||'',name:r.name||'',quantity:Number(r.quantity)||0,unit:r.unit||'g',wastePercent:Number(r.wastePercent)||0})).filter(r=>r.ingredientId&&r.quantity>0):[];
+export const recipeForProduct=p=>normalizeRecipe(p?.recipe||p?.ingredients||[]);
+export const isIngredient=p=>p?.type==='ingredient'||p?.stockUnit==='g'||p?.stockUnit==='kg'||p?.stockUnit==='ml'||p?.stockUnit==='l'||p?.stockUnit==='pcs';
+export const unitFactor=(from='g',to='g')=>{const f=String(from).toLowerCase(),t=String(to).toLowerCase();if(f===t)return 1;if(f==='kg'&&t==='g')return 1000;if(f==='g'&&t==='kg')return .001;if(f==='l'&&t==='ml')return 1000;if(f==='ml'&&t==='l')return .001;return 1};
+export const recipeConsumption=(product,qty=1)=>recipeForProduct(product).map(r=>({...r,quantity:r.quantity*Number(qty||0)*(1+(r.wastePercent||0)/100)}));
+export const availableRecipeUnits=(product,state)=>{const recipe=recipeForProduct(product);if(!recipe.length)return Math.max(0,Number(product?.stock)||0);return Math.max(0,Math.min(...recipe.map(r=>{const p=state.products.find(x=>x.id===r.ingredientId);if(!p)return 0;const available=Number(p.stock)||0;const needed=Number(r.quantity)||0;return needed?Math.floor(available/Math.max(.000001,needed)):0})))};
+export const consumeSaleIngredients=(products,items)=>{const next=products.map(p=>({...p})),moves=[],shortages=[];for(const item of items||[]){const product=next.find(p=>p.id===item.productId);if(!product)continue;const recipe=recipeConsumption(product,item.qty);for(const r of recipe){const ingredient=next.find(p=>p.id===r.ingredientId);if(!ingredient){shortages.push({productId:product.id,product:product.name,ingredientId:r.ingredientId,needed:r.quantity,available:0});continue}const before=Number(ingredient.stock)||0;ingredient.stock=Math.max(0,before-r.quantity);if(before<r.quantity)shortages.push({productId:product.id,product:product.name,ingredientId:ingredient.id,ingredient:ingredient.name,needed:r.quantity,available:before});moves.push({id:uid('MOV'),date:today(),type:'RECIPE_CONSUMPTION',productId:ingredient.id,product:ingredient.name,qty:-r.quantity,reference:item.reference||'',sourceProductId:product.id,sourceProduct:product.name,unit:r.unit||ingredient.stockUnit||'g',by:item.by||'POS'});}}return {products:next,moves,shortages};};
+export const stockAfterSales=(products,sales)=>{let current=products.map(p=>({...p}));for(const sale of sales||[]){const direct=[];for(const item of sale.items||[]){const p=current.find(x=>x.id===item.productId);if(!p)continue;if(recipeForProduct(p).length)direct.push({...item,reference:sale.invoice,by:sale.staff});else{p.stock=Math.max(0,(Number(p.stock)||0)-(Number(item.qty)||0));}}const consumed=consumeSaleIngredients(current,direct);current=consumed.products;}return current;};
+export const csvEscape=v=>`"${String(v??'').replaceAll('"','""')}"`;
+export const productsToCSV=products=>[['name','sku','barcode','category','cost','price','tax','stock','stockUnit','type','status','recipe'],...products.map(p=>[p.name,p.sku,p.barcode,p.category,p.cost,p.price,p.tax,p.stock,p.stockUnit||'pcs',p.type||'product',p.active?'active':'inactive',recipeForProduct(p).map(r=>`${r.ingredientId}:${r.quantity}${r.unit}`).join('|')])].map(r=>r.map(csvEscape).join(',')).join('\n');
+export function parseCSV(text){const rows=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const c=text[i],n=text[i+1];if(c==='"'&&q&&n==='"'){cell+='"';i++;continue}if(c==='"'){q=!q;continue}if(c===','&&!q){row.push(cell);cell='';continue}if((c==='\n'||c==='\r')&&!q){if(c==='\r'&&n==='\n')i++;row.push(cell);if(row.some(Boolean))rows.push(row);row=[];cell='';continue}cell+=c}if(cell||row.length){row.push(cell);rows.push(row)}return rows}
+export const parseRecipeText=(text='')=>String(text).split('|').map(part=>{const m=part.trim().match(/^([^:]+):([0-9.]+)\s*([a-zA-Z]+)?$/);return m?{ingredientId:m[1].trim(),quantity:Number(m[2]),unit:m[3]||'g'}:null}).filter(Boolean);
+export const downloadText=(name,text,type='text/csv')=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)};
+export const loadState=()=>{try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch{return {}}};
+export const saveState=s=>{try{const previous=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');const previousSaleIds=new Set((previous.sales||[]).map(x=>x.id));const products=s.products||[];const newSales=(s.sales||[]).filter(x=>!previousSaleIds.has(x.id));const applied=[];for(const sale of newSales){const direct=[];for(const item of sale.items||[]){const product=products.find(p=>p.id===item.productId);if(!product)continue;if(recipeForProduct(product).length)direct.push({...item,reference:sale.invoice,by:sale.staff});else{const p=products.find(x=>x.id===item.productId);if(p)p.stock=Math.max(0,(Number(p.stock)||0)-(Number(item.qty)||0));}}const consumed=consumeSaleIngredients(products,direct);for(const m of consumed.moves)applied.push({...m,reference:sale.invoice});for(const sh of consumed.shortages)(s.audit=s.audit||[]).push({id:uid('AUD'),date:today(),action:`Recipe shortage: ${sh.ingredient||sh.ingredientId} for ${sh.product}`,by:'POS'});}s.inventoryMoves=s.inventoryMoves||[];s.inventoryMoves.push(...applied);s.audit=s.audit||[];if(applied.length)s.audit.push({id:uid('AUD'),date:today(),action:`Recipe ingredients consumed for ${applied.length} stock movements`,by:'POS'});localStorage.setItem(STORAGE_KEY,JSON.stringify(s));}catch(e){localStorage.setItem(STORAGE_KEY,JSON.stringify(s));}};
