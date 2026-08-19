@@ -1,3 +1,4 @@
+import './salesAudit';
 import {logPrint} from './printHistory';
 const KEY = 'mkpos:last-printer';
 const THEME_KEY = 'mkpos:receipt-theme';
