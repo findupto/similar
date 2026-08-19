@@ -1,3 +1,5 @@
+import './salesAudit.js';
+
 const KEY = 'mkpos:last-printer';
 const THEME_KEY = 'mkpos:receipt-theme';
 
@@ -39,9 +41,7 @@ function escPosKitchen({ business, address, phone, invoice, date, customer, item
   let out = '\x1b\x40\x1b\x21\x00';
   out += center(`\x1b\x45\x01${fit(business, w)}\x1b\x45\x00\nKITCHEN ORDER\n`);
   out += `${t.divider}\nOrder: ${invoice}\n${date}\nCustomer: ${fit(customer, w - 10)}\n${t.divider}\n`;
-  for (const i of items || []) {
-    out += `${String(i.qty).padStart(2)} x ${fit(i.name, w - 7)}\n`;
-  }
+  for (const i of items || []) out += `${String(i.qty).padStart(2)} x ${fit(i.name, w - 7)}\n`;
   out += `${t.divider}\n${center('PREPARE ORDER\n')}\n\n\x1d\x56\x00`;
   return out;
 }
@@ -76,29 +76,24 @@ export const PrinterBridge = {
     return value;
   },
   async test(printer) {
-    if (window.mkPosDesktop?.printEscPos && printer?.port?.toUpperCase().startsWith('COM')) {
-      return window.mkPosDesktop.printEscPos({ port: printer.port, data: '\x1b\x40\x1b\x45\x01MK Pizza POS\x1b\x45\x00\n80mm Printer Test OK\n\n\x1d\x56\x00' });
-    }
-    window.print();
-    return { ok: true, fallback: true };
+    if (window.mkPosDesktop?.printEscPos && printer?.port?.toUpperCase().startsWith('COM')) return window.mkPosDesktop.printEscPos({ port: printer.port, data: '\x1b\x40\x1b\x45\x01MK Pizza POS\x1b\x45\x00\n80mm Printer Test OK\n\n\x1d\x56\x00' });
+    window.print(); return { ok: true, fallback: true };
   },
   async print(receipt, printer) {
     const savedTheme = localStorage.getItem(THEME_KEY) || printer?.theme || 'classic';
     const data = escPosReceipt({ ...receipt, theme: savedTheme });
-    return send(data, printer);
+    const result = await send(data, printer);
+    try { const { logPrint } = await import('./salesAudit.js'); logPrint('customer', receipt); } catch {}
+    return result;
   },
-  async printCustomer(receipt, printer) {
-    return this.print(receipt, printer);
-  },
+  async printCustomer(receipt, printer) { return this.print(receipt, printer); },
   async printKitchen(order, printer) {
     const savedTheme = localStorage.getItem(THEME_KEY) || printer?.theme || 'classic';
     const data = escPosKitchen({ ...order, theme: savedTheme });
-    return send(data, printer);
+    const result = await send(data, printer);
+    try { const { logPrint } = await import('./salesAudit.js'); logPrint('kitchen', order); } catch {}
+    return result;
   },
-  setTheme(theme) {
-    const value = RECEIPT_THEMES[theme] ? theme : 'classic';
-    localStorage.setItem(THEME_KEY, value);
-    return value;
-  },
+  setTheme(theme) { const value = RECEIPT_THEMES[theme] ? theme : 'classic'; localStorage.setItem(THEME_KEY, value); return value; },
   getTheme() { return localStorage.getItem(THEME_KEY) || 'classic'; }
 };
