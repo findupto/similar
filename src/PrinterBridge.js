@@ -32,6 +32,30 @@ function escPosReceipt({ business, address, phone, invoice, date, customer, item
   return out;
 }
 
+function escPosKitchen({ business, address, phone, invoice, date, customer, items, theme = 'classic' }) {
+  const t = RECEIPT_THEMES[theme] || RECEIPT_THEMES.classic;
+  const w = t.width;
+  const center = s => `\x1b\x61\x01${s}\x1b\x61\x00`;
+  let out = '\x1b\x40\x1b\x21\x00';
+  out += center(`\x1b\x45\x01${fit(business, w)}\x1b\x45\x00\nKITCHEN ORDER\n`);
+  out += `${t.divider}\nOrder: ${invoice}\n${date}\nCustomer: ${fit(customer, w - 10)}\n${t.divider}\n`;
+  for (const i of items || []) {
+    out += `${String(i.qty).padStart(2)} x ${fit(i.name, w - 7)}\n`;
+  }
+  out += `${t.divider}\n${center('PREPARE ORDER\n')}\n\n\x1d\x56\x00`;
+  return out;
+}
+
+async function send(data, printer) {
+  const target = printer?.port ? printer : await PrinterBridge.reconnect();
+  if (window.mkPosDesktop?.printEscPos && target?.port?.toUpperCase().startsWith('COM')) {
+    const result = await window.mkPosDesktop.printEscPos({ port: target.port, data });
+    if (result?.ok) return result;
+  }
+  window.print();
+  return { ok: true, fallback: true };
+}
+
 export const PrinterBridge = {
   async discover() {
     if (window.mkPosDesktop?.discoverPrinters) {
@@ -60,14 +84,16 @@ export const PrinterBridge = {
   },
   async print(receipt, printer) {
     const savedTheme = localStorage.getItem(THEME_KEY) || printer?.theme || 'classic';
-    const target = printer?.port ? printer : await this.reconnect();
     const data = escPosReceipt({ ...receipt, theme: savedTheme });
-    if (window.mkPosDesktop?.printEscPos && target?.port?.toUpperCase().startsWith('COM')) {
-      const result = await window.mkPosDesktop.printEscPos({ port: target.port, data });
-      if (result?.ok) return result;
-    }
-    window.print();
-    return { ok: true, fallback: true };
+    return send(data, printer);
+  },
+  async printCustomer(receipt, printer) {
+    return this.print(receipt, printer);
+  },
+  async printKitchen(order, printer) {
+    const savedTheme = localStorage.getItem(THEME_KEY) || printer?.theme || 'classic';
+    const data = escPosKitchen({ ...order, theme: savedTheme });
+    return send(data, printer);
   },
   setTheme(theme) {
     const value = RECEIPT_THEMES[theme] ? theme : 'classic';
