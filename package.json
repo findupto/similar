@@ -9,9 +9,6 @@
   "scripts":{
     "dev":"npm run electron:dev",
     "web:dev":"vite --host 127.0.0.1",
-    "electron:dev":"concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "build":"npm run build && electron-builder --win nsis",
-    "web:dev":"vite --host 127.0.0.1",
     "build":"vite build",
     "electron:dev":"concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "dist":"npm run build && electron-builder --win nsis",
