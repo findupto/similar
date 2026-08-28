@@ -1,4 +1,5 @@
 {
+<<<<<<< Updated upstream
   "name":"findupto-ai-pos",
   "private":true,
   "version":"3.0.0",
@@ -19,30 +20,77 @@
     "dist:x64":"npm run verify:production && npm run build && electron-builder --win nsis --x64",
     "dist:portable:x64":"npm run verify:production && npm run build && electron-builder --win portable --x64",
     "postinstall":"electron-builder install-app-deps"
+=======
+  "name": "findupto-ai-pos",
+  "private": true,
+  "version": "3.0.0",
+  "description": "Findupto AI Premium POS and Commerce Suite",
+  "author": "Findupto",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "npm run electron:dev",
+    "web:dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "verify:production": "node scripts/production-check.mjs",
+    "features:apply": "node scripts/apply-menu-features.mjs",
+    "electron:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "dist": "npm run verify:production && npm run build && electron-builder --win nsis",
+    "dist:portable": "npm run verify:production && npm run build && electron-builder --win portable",
+    "dist:installer": "npm run verify:production && npm run build && electron-builder --win nsis",
+    "dist:x64": "npm run verify:production && npm run build && electron-builder --win nsis --x64",
+    "dist:portable:x64": "npm run verify:production && npm run build && electron-builder --win portable --x64",
+    "postinstall": "electron-builder install-app-deps"
+>>>>>>> Stashed changes
   },
-  "dependencies":{
-    "better-sqlite3":"11.10.0",
-    "iconv-lite":"0.6.3",
-    "lucide-react":"0.468.0",
-    "react":"19.0.0",
-    "react-dom":"19.0.0"
+  "dependencies": {
+    "better-sqlite3": "11.10.0",
+    "iconv-lite": "0.6.3",
+    "lucide-react": "0.468.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
   },
-  "devDependencies":{
-    "concurrently":"9.1.2",
-    "electron":"34.3.3",
-    "electron-builder":"25.1.8",
-    "vite":"6.1.0",
-    "wait-on":"8.0.2"
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^34.3.3",
+    "electron-builder": "25.1.8",
+    "vite": "6.1.0",
+    "wait-on": "8.0.2"
   },
-  "build":{
-    "appId":"pk.findupto.aipos",
-    "productName":"Findupto AI POS",
-    "artifactName":"Findupto-AI-POS-${version}-${arch}.${ext}",
-    "asar":true,
-    "files":["dist/**/*","electron/**/*","src/**/*","package.json"],
-    "directories":{"output":"release"},
-    "win":{"target":"nsis"},
-    "nsis":{"artifactName":"Findupto-AI-POS-${version}-${arch}-Setup.exe","oneClick":false,"perMachine":false,"allowToChangeInstallationDirectory":true,"createDesktopShortcut":true,"createStartMenuShortcut":true,"shortcutName":"Findupto AI POS","include":"build/installer.nsh"},
-    "portable":{"artifactName":"Findupto-AI-POS-${version}-${arch}-Portable.exe"}
+  "build": {
+    "appId": "pk.findupto.aipos",
+    "productName": "Findupto AI POS",
+    "artifactName": "Findupto-AI-POS-${version}-${arch}.${ext}",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "artifactName": "Findupto-AI-POS-${version}-${arch}-Setup.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Findupto AI POS",
+      "include": "build/installer.nsh"
+    },
+    "portable": {
+      "artifactName": "Findupto-AI-POS-${version}-${arch}-Portable.exe"
+    }
+  },
+  "allowScripts": {
+    "electron@34.3.3": true,
+    "esbuild@0.24.2": true,
+    "better-sqlite3@11.10.0": true
   }
 }
