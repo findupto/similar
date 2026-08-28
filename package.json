@@ -1,13 +1,13 @@
 {
   "name":"mk-pizza-pos",
   "private":true,
-  "version":"2.1.7",
+  "version":"2.1.8",
   "description":"Standalone POS for MK Pizza & Ice Bar",
   "author":"Findupto",
   "type":"module",
   "main":"electron/main.cjs",
   "scripts":{"dev":"npm run electron:dev","web:dev":"vite --host 127.0.0.1","build":"vite build","electron:dev":"concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"","dist":"npm run build && electron-builder --win nsis","dist:portable":"npm run build && electron-builder --win portable","dist:installer":"npm run build && electron-builder --win nsis","dist:x64":"npm run build && electron-builder --win nsis --x64","dist:portable:x64":"npm run build && electron-builder --win portable --x64","dist:ia32":"npm run build && electron-builder --win nsis --ia32","dist:portable:ia32":"npm run build && electron-builder --win portable --ia32","dist:arm64":"npm run build && electron-builder --win nsis --arm64","postinstall":"electron-builder install-app-deps"},
-  "dependencies":{"bluetooth-serial-port":"3.0.5","iconv-lite":"0.6.3","lucide-react":"latest","react":"latest","react-dom":"latest"},
+  "dependencies":{"iconv-lite":"0.6.3","lucide-react":"latest","react":"latest","react-dom":"latest"},
   "devDependencies":{"concurrently":"latest","electron":"latest","electron-builder":"latest","vite":"latest","wait-on":"latest"},
   "build":{"appId":"pk.findupto.mkpizza.pos","productName":"MK Pizza & Ice Bar POS","artifactName":"MK-Pizza-POS-${version}-${arch}.${ext}","asar":true,"files":["dist/**/*","electron/**/*","package.json"],"directories":{"output":"release"},"win":{"target":"nsis"},"nsis":{"artifactName":"MK-Pizza-POS-${version}-${arch}-Setup.exe","oneClick":false,"perMachine":false,"allowToChangeInstallationDirectory":true,"createDesktopShortcut":true,"createStartMenuShortcut":true,"shortcutName":"MK Pizza POS","include":"build/installer.nsh"},"portable":{"artifactName":"MK-Pizza-POS-${version}-${arch}-Portable.exe"}}
 }
