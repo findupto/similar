@@ -1,26 +1,4 @@
 {
-<<<<<<< Updated upstream
-  "name":"findupto-ai-pos",
-  "private":true,
-  "version":"3.0.0",
-  "description":"Findupto AI Premium POS and Commerce Suite",
-  "author":"Findupto",
-  "type":"module",
-  "main":"electron/main.cjs",
-  "scripts":{
-    "dev":"npm run electron:dev",
-    "web:dev":"npm run features:apply && vite --host 127.0.0.1",
-    "build":"npm run features:apply && vite build",
-    "verify:production":"node scripts/production-check.mjs",
-    "features:apply":"node scripts/apply-menu-features.mjs",
-    "electron:dev":"concurrently -k \"npm run web:dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "dist":"npm run verify:production && npm run build && electron-builder --win nsis",
-    "dist:portable":"npm run verify:production && npm run build && electron-builder --win portable",
-    "dist:installer":"npm run verify:production && npm run build && electron-builder --win nsis",
-    "dist:x64":"npm run verify:production && npm run build && electron-builder --win nsis --x64",
-    "dist:portable:x64":"npm run verify:production && npm run build && electron-builder --win portable --x64",
-    "postinstall":"electron-builder install-app-deps"
-=======
   "name": "findupto-ai-pos",
   "private": true,
   "version": "3.0.0",
@@ -30,18 +8,17 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "npm run electron:dev",
-    "web:dev": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "web:dev": "npm run features:apply && vite --host 127.0.0.1",
+    "build": "npm run features:apply && vite build",
     "verify:production": "node scripts/production-check.mjs",
     "features:apply": "node scripts/apply-menu-features.mjs",
-    "electron:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "electron:dev": "concurrently -k \"npm run web:dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "dist": "npm run verify:production && npm run build && electron-builder --win nsis",
     "dist:portable": "npm run verify:production && npm run build && electron-builder --win portable",
     "dist:installer": "npm run verify:production && npm run build && electron-builder --win nsis",
     "dist:x64": "npm run verify:production && npm run build && electron-builder --win nsis --x64",
     "dist:portable:x64": "npm run verify:production && npm run build && electron-builder --win portable --x64",
     "postinstall": "electron-builder install-app-deps"
->>>>>>> Stashed changes
   },
   "dependencies": {
     "better-sqlite3": "11.10.0",
