@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Plus,Upload,Download,Wallet,Receipt,Truck,Users,HandCoins,BarChart3,Search,Edit3,Trash2,Check,Power,RotateCcw} from 'lucide-react';
-import {uid,today,money,parseCSV,productsToCSV,downloadText} from './posData';
+import {uid,today,money,parseCSV,downloadText} from './posData';
 import {ExpenseManager} from './expenseManager';
 export const Panel=({title,children})=><section className="panel">{title&&<div className="panel-title"><h2>{title}</h2></div>}{children}</section>;
 export const Table=({headers,rows})=><div className="table-wrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j}>{c}</td>)}</tr>):<tr><td colSpan={headers.length}><div className="empty">No records yet</div></td></tr>}</tbody></table></div>;
