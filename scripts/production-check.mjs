@@ -15,8 +15,8 @@ for (const section of ['dependencies', 'devDependencies']) {
 
 const electron = read('electron/main.cjs');
 if (electron.includes('-ExecutionPolicy Bypass')) failures.push('Electron must not launch PowerShell with ExecutionPolicy Bypass');
-if (!electron.includes('contextIsolation:true') || !electron.includes('nodeIntegration:false')) failures.push('Electron security preferences are missing');
-if (!electron.includes('sandbox:true')) failures.push('Electron renderer sandbox is missing');
+if (!/contextIsolation\s*:\s*true/.test(electron) || !/nodeIntegration\s*:\s*false/.test(electron)) failures.push('Electron security preferences are missing');
+if (!/sandbox\s*:\s*true/.test(electron)) failures.push('Electron renderer sandbox is missing');
 if (!electron.includes('Content-Security-Policy')) failures.push('Content Security Policy is missing');
 
 const server = read('server/index.js');
