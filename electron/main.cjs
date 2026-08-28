@@ -8,31 +8,19 @@ let win;
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://127.0.0.1:5173/';
 const LOCAL_SCHEME = 'file:';
-
 function psJson(script){return new Promise(resolve=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,timeout:15000},(err,stdout)=>{if(err)return resolve([]);try{resolve(JSON.parse(stdout||'[]'))}catch{resolve([])}}))}
 function psRun(script,timeout=15000){return new Promise(resolve=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,timeout},(err,stdout,stderr)=>resolve({ok:!err,error:err?.message||String(stderr||'')||null,stdout:String(stdout||'')})))}
-
-function installSecurityHeaders(){
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const headers = {...details.responseHeaders};
-    headers['Content-Security-Policy'] = [isDev
-      ? "default-src 'self' http://127.0.0.1:5173; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'"
-      : "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"];
-    headers['X-Content-Type-Options'] = ['nosniff']; headers['X-Frame-Options'] = ['DENY']; callback({responseHeaders: headers});
-  });
-}
-
+function installSecurityHeaders(){session.defaultSession.webRequest.onHeadersReceived((details,callback)=>{const headers={...details.responseHeaders};headers['Content-Security-Policy']=[isDev?"default-src 'self' http://127.0.0.1:5173; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'":"default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"];headers['X-Content-Type-Options']=['nosniff'];headers['X-Frame-Options']=['DENY'];callback({responseHeaders:headers})})}
 async function listWindowsPrinters(){if(process.platform!=='win32')return[];const ps=`$items=@();try{$items+=@(Get-CimInstance Win32_SerialPort|%{[pscustomobject]@{id=$_.DeviceID;name=$_.Name;description=$_.Description;port=$_.DeviceID;transportPort=$_.DeviceID;type='COM / Bluetooth SPP';pnpId=$_.PNPDeviceID}})}catch{};try{$items+=@(Get-Printer|%{[pscustomobject]@{id=$_.Name;name=$_.Name;description=$_.DriverName;port=$_.PortName;transportPort=if($_.PortName -match '^COM\\d+$'){$_.PortName}else{''};type='Windows Printer';printerName=$_.Name}})}catch{};$items|ConvertTo-Json -Compress;`;const data=await psJson(ps);const rows=Array.isArray(data)?data:(data&&(data.id||data.name)?[data]:[]);const seen=new Set();return rows.filter(x=>{const k=`${x.id}|${x.port}|${x.type}`;if(seen.has(k))return false;seen.add(k);return true})}
 async function loadDevUrl(){for(let n=0;n<30;n++){if(!win||win.isDestroyed())return;try{await win.loadURL(DEV_URL);return}catch(err){if(n===29)console.error('[MK POS] loadURL failed',err.message);await new Promise(r=>setTimeout(r,500))}}}
 function isAllowedNavigation(url){if(isDev&&url.startsWith(DEV_URL))return true;try{return new URL(url).protocol===LOCAL_SCHEME}catch{return false}}
-function createWindow(){win=new BrowserWindow({width:1440,height:900,minWidth:1024,minHeight:680,show:true,backgroundColor:'#f6f7fb',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,devTools:isDev}});win.webContents.on('will-navigate',(event,url)=>{if(!isAllowedNavigation(url))event.preventDefault()});win.webContents.setWindowOpenHandler(({url})=>isAllowedNavigation(url)?{action:'allow'}:{action:'deny'});win.webContents.on('did-fail-load',(_e,errorCode,errorDescription,validatedURL)=>console.error('[MK POS] did-fail-load',errorCode,errorDescription,validatedURL));win.webContents.on('render-process-gone',(_e,details)=>console.error('[MK POS] render-process-gone',details));win.webContents.on('console-message',(_e,level,message,line,source)=>{if(level>=2)console.error('[MK POS renderer]',message,source+':'+line)});if(isDev)loadDevUrl();else win.loadURL(pathToFileURL(path.join(__dirname,'..','dist','index.html')).href).catch(err=>console.error('[MK POS] packaged load failed',err.message));}
+function createWindow(){win=new BrowserWindow({width:1440,height:900,minWidth:1024,minHeight:680,show:true,backgroundColor:'#f6f7fb',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,devTools:isDev}});win.webContents.on('will-navigate',(event,url)=>{if(!isAllowedNavigation(url))event.preventDefault()});win.webContents.setWindowOpenHandler(({url})=>isAllowedNavigation(url)?{action:'allow'}:{action:'deny'});win.webContents.on('did-fail-load',(_e,errorCode,errorDescription,validatedURL)=>console.error('[MK POS] did-fail-load',errorCode,errorDescription,validatedURL));win.webContents.on('render-process-gone',(_e,details)=>console.error('[MK POS] render-process-gone',details));win.webContents.on('console-message',(_e,level,message,line,source)=>{if(level>=2)console.error('[MK POS renderer]',message,source+':'+line)});if(isDev)loadDevUrl();else win.loadURL(pathToFileURL(path.join(__dirname,'..','dist','index.html')).href).catch(err=>console.error('[MK POS] packaged load failed',err.message))}
 
-app.whenReady().then(()=>{installSecurityHeaders();createWindow();app.on('activate',()=>{if(!BrowserWindow.getAllWindows().length)createWindow()})});
-
-ipcMain.handle('db:load-state',()=>loadState());
-ipcMain.handle('db:save-state',(_event,{state,actor}={})=>saveState(state,actor));
+ipcMain.on('db:load-state-sync',(event)=>{try{event.returnValue=loadState()}catch(error){console.error('[MK POS] database load failed',error);event.returnValue=null}});
+ipcMain.on('db:save-state-sync',(event,{state,actor}={})=>{try{event.returnValue=saveState(state,actor)}catch(error){console.error('[MK POS] database save failed',error);event.returnValue={ok:false,error:'Database write failed'}}});
 ipcMain.handle('db:backup',(_event,{targetPath}={})=>{if(typeof targetPath!=='string'||!targetPath.trim())throw new Error('Invalid backup path');return backup(targetPath)});
 
+app.whenReady().then(()=>{installSecurityHeaders();createWindow();app.on('activate',()=>{if(!BrowserWindow.getAllWindows().length)createWindow()})});
 function safePort(v){const p=String(v||'').trim().toUpperCase();return /^COM\d+$/.test(p)?p:null}
 async function getComPorts(){if(process.platform!=='win32')return[];const data=await psJson(`@(Get-CimInstance Win32_SerialPort|%{$_.DeviceID})|ConvertTo-Json -Compress`);const rows=Array.isArray(data)?data:(data?[data]:[]);return rows.map(s=>safePort(s)).filter(Boolean)}
 function bytesFrom(data){if(Array.isArray(data))return Buffer.from(data.map(Number).filter(Number.isFinite).map(n=>Math.max(0,Math.min(255,n))));if(Buffer.isBuffer(data))return data;return Buffer.from(String(data||''),'binary')}
@@ -46,5 +34,4 @@ ipcMain.handle('printer:print',async(_e,{address,data,port,baudRate=9600,printer
 ipcMain.handle('printer:test-serial',async(_e,{address,port,baudRate=9600,printerName,allPorts=true}={})=>{const results=[];if(printerName){const q=await queueSend(printerName,testPayload('WINDOWS-RAW'));results.push(q);if(q.ok&&!allPorts)return{...q,diagnostics:results}}const ports=[port,...(allPorts?await getComPorts():[])].map(safePort).filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i);const rates=allPorts?[Number(baudRate)||9600,115200,460800]:[Number(baudRate)||9600];for(const p of ports){for(const rate of [...new Set(rates)]){for(const signals of allPorts?[{dtr:false,rts:false},{dtr:true,rts:true}]:[{dtr:false,rts:false}]){const r=await diagnosticComTest(p,rate,signals);results.push(r);if(r.ok)return{...r,diagnostics:results}}}}return{ok:false,transport:'diagnostic',bluetoothAddress:address||'',error:'No working serial transport found',diagnostics:results}});
 ipcMain.handle('printer:print-raw',(_e,{printerName,data}={})=>queueSend(printerName,data));
 ipcMain.handle('printer:print-html',async()=>({ok:false,reason:'html-print-disabled-use-raw'}));
-app.on('before-quit',()=>{try{close()}catch{}});
-app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
+app.on('before-quit',()=>{try{close()}catch{}});app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
