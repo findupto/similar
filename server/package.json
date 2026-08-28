@@ -1,0 +1,1 @@
+{"name":"mk-pizza-online-server","private":true,"type":"module","scripts":{"start":"node index.js"},"dependencies":{"cors":"latest","express":"latest","pg":"latest"}}
