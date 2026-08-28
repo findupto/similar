@@ -3,7 +3,8 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const fs = require('fs');
-const { loadState, saveState, backup, integrityCheck, close } = require('./database.cjs');
+const { loadState, saveState, backup, integrityCheck, authenticate, close } = require('./database.cjs');
+const { analyze } = require('./ai.cjs');
 
 let win;
 const isDev = !app.isPackaged;
@@ -12,83 +13,28 @@ const LOCAL_SCHEME = 'file:';
 const logDir = path.join(app.getPath('userData'), 'logs');
 fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'electron.log');
-function log(...args) {
-  const line = `[${new Date().toISOString()}] ${args.map(v => v instanceof Error ? v.stack || v.message : typeof v === 'string' ? v : JSON.stringify(v)).join(' ')}\n`;
-  try { fs.appendFileSync(logFile, line); } catch {}
-  console.log(line.trim());
-}
+function log(...args) { const line = `[${new Date().toISOString()}] ${args.map(v => v instanceof Error ? v.stack || v.message : typeof v === 'string' ? v : JSON.stringify(v)).join(' ')}\n`; try { fs.appendFileSync(logFile, line); } catch {} console.log(line.trim()); }
 process.on('uncaughtException', error => log('[uncaughtException]', error));
 process.on('unhandledRejection', reason => log('[unhandledRejection]', reason));
 app.on('render-process-gone', (_event, webContents, details) => log('[render-process-gone]', details));
 app.on('child-process-gone', (_event, details) => log('[child-process-gone]', details));
-
-function psJson(script) {
-  return new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 15000 }, (err, stdout) => {
-    if (err) return resolve([]);
-    try { resolve(JSON.parse(stdout || '[]')); } catch { resolve([]); }
-  }));
-}
-function psRun(script, timeout = 15000) {
-  return new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, error: err?.message || String(stderr || '') || null, stdout: String(stdout || '') })));
-}
-function installSecurityHeaders() {
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const headers = { ...details.responseHeaders };
-    headers['Content-Security-Policy'] = [isDev
-      ? "default-src 'self' http://127.0.0.1:5173; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'"
-      : "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"];
-    headers['X-Content-Type-Options'] = ['nosniff'];
-    headers['X-Frame-Options'] = ['DENY'];
-    callback({ responseHeaders: headers });
-  });
-}
-async function listWindowsPrinters() {
-  if (process.platform !== 'win32') return [];
-  const ps = `$items=@();try{$items+=@(Get-CimInstance Win32_SerialPort|%{[pscustomobject]@{id=$_.DeviceID;name=$_.Name;description=$_.Description;port=$_.DeviceID;transportPort=$_.DeviceID;type='COM / Bluetooth SPP';pnpId=$_.PNPDeviceID}})}catch{};try{$items+=@(Get-Printer|%{[pscustomobject]@{id=$_.Name;name=$_.Name;description=$_.DriverName;port=$_.PortName;transportPort=if($_.PortName -match '^COM\\d+$'){$_.PortName}else{''};type='Windows Printer';printerName=$_.Name}})}catch{};$items|ConvertTo-Json -Compress;`;
-  const data = await psJson(ps);
-  const rows = Array.isArray(data) ? data : (data && (data.id || data.name) ? [data] : []);
-  const seen = new Set();
-  return rows.filter(x => { const k = `${x.id}|${x.port}|${x.type}`; if (seen.has(k)) return false; seen.add(k); return true; });
-}
-async function loadDevUrl() {
-  for (let n = 0; n < 30; n++) {
-    if (!win || win.isDestroyed()) return;
-    try { await win.loadURL(DEV_URL); return; }
-    catch (err) { log('[MK POS] loadURL retry', n + 1, err.message); await new Promise(r => setTimeout(r, 500)); }
-  }
-  throw new Error(`Unable to load development URL: ${DEV_URL}`);
-}
-function isAllowedNavigation(url) {
-  if (isDev && url.startsWith(DEV_URL)) return true;
-  try { return new URL(url).protocol === LOCAL_SCHEME; } catch { return false; }
-}
-function createWindow() {
-  log('[MK POS] creating BrowserWindow', { isDev, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node });
-  win = new BrowserWindow({ width: 1440, height: 900, minWidth: 1024, minHeight: 680, show: true, backgroundColor: '#f6f7fb', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, devTools: isDev } });
-  win.on('closed', () => { log('[MK POS] main window closed'); win = null; });
-  win.webContents.on('did-finish-load', () => log('[MK POS] renderer loaded', win.webContents.getURL()));
-  win.webContents.on('did-fail-load', (_e, code, description, url) => log('[MK POS] renderer failed to load', { code, description, url }));
-  win.webContents.on('console-message', (_e, level, message, line, sourceId) => log('[renderer]', { level, message, line, sourceId }));
-  win.webContents.on('will-navigate', (event, url) => { if (!isAllowedNavigation(url)) event.preventDefault(); });
-  win.webContents.setWindowOpenHandler(({ url }) => isAllowedNavigation(url) ? { action: 'allow' } : { action: 'deny' });
-  win.webContents.on('render-process-gone', (_e, details) => log('[MK POS] render-process-gone', details));
-  if (isDev) loadDevUrl().catch(err => log('[MK POS] development load failed', err));
-  else win.loadURL(pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href).catch(err => log('[MK POS] packaged load failed', err));
-}
+function psJson(script) { return new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 15000 }, (err, stdout) => { if (err) return resolve([]); try { resolve(JSON.parse(stdout || '[]')); } catch { resolve([]); } })); }
+function psRun(script, timeout = 15000) { return new Promise(resolve => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, error: err?.message || String(stderr || '') || null, stdout: String(stdout || '') }))); }
+function installSecurityHeaders() { session.defaultSession.webRequest.onHeadersReceived((details, callback) => { const headers = { ...details.responseHeaders }; headers['Content-Security-Policy'] = [isDev ? "default-src 'self' http://127.0.0.1:5173; connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'" : "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"]; headers['X-Content-Type-Options'] = ['nosniff']; headers['X-Frame-Options'] = ['DENY']; callback({ responseHeaders: headers }); }); }
+async function listWindowsPrinters() { if (process.platform !== 'win32') return []; const ps = `$items=@();try{$items+=@(Get-CimInstance Win32_SerialPort|%{[pscustomobject]@{id=$_.DeviceID;name=$_.Name;description=$_.Description;port=$_.DeviceID;transportPort=$_.DeviceID;type='COM / Bluetooth SPP';pnpId=$_.PNPDeviceID}})}catch{};try{$items+=@(Get-Printer|%{[pscustomobject]@{id=$_.Name;name=$_.Name;description=$_.DriverName;port=$_.PortName;transportPort=if($_.PortName -match '^COM\\d+$'){$_.PortName}else{''};type='Windows Printer';printerName=$_.Name}})}catch{};$items|ConvertTo-Json -Compress;`; const data = await psJson(ps); const rows = Array.isArray(data) ? data : (data && (data.id || data.name) ? [data] : []); const seen = new Set(); return rows.filter(x => { const k = `${x.id}|${x.port}|${x.type}`; if (seen.has(k)) return false; seen.add(k); return true; }); }
+async function loadDevUrl() { for (let n = 0; n < 30; n++) { if (!win || win.isDestroyed()) return; try { await win.loadURL(DEV_URL); return; } catch (err) { log('[MK POS] loadURL retry', n + 1, err.message); await new Promise(r => setTimeout(r, 500)); } } throw new Error(`Unable to load development URL: ${DEV_URL}`); }
+function isAllowedNavigation(url) { if (isDev && url.startsWith(DEV_URL)) return true; try { return new URL(url).protocol === LOCAL_SCHEME; } catch { return false; } }
+function createWindow() { log('[MK POS] creating BrowserWindow', { isDev, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node }); win = new BrowserWindow({ width: 1440, height: 900, minWidth: 1024, minHeight: 680, show: true, backgroundColor: '#f6f7fb', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, devTools: isDev } }); win.on('closed', () => { log('[MK POS] main window closed'); win = null; }); win.webContents.on('did-finish-load', () => log('[MK POS] renderer loaded', win.webContents.getURL())); win.webContents.on('did-fail-load', (_e, code, description, url) => log('[MK POS] renderer failed to load', { code, description, url })); win.webContents.on('console-message', (_e, level, message, line, sourceId) => log('[renderer]', { level, message, line, sourceId })); win.webContents.on('will-navigate', (event, url) => { if (!isAllowedNavigation(url)) event.preventDefault(); }); win.webContents.setWindowOpenHandler(({ url }) => isAllowedNavigation(url) ? { action: 'allow' } : { action: 'deny' }); win.webContents.on('render-process-gone', (_e, details) => log('[MK POS] render-process-gone', details)); if (isDev) loadDevUrl().catch(err => log('[MK POS] development load failed', err)); else win.loadURL(pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href).catch(err => log('[MK POS] packaged load failed', err)); }
 
 ipcMain.on('db:load-state-sync', event => { try { event.returnValue = loadState(); } catch (error) { log('[MK POS] database load failed', error); event.returnValue = null; } });
 ipcMain.on('db:save-state-sync', (event, { state, actor } = {}) => { try { event.returnValue = saveState(state, actor); } catch (error) { log('[MK POS] database save failed', error); event.returnValue = { ok: false, error: 'Database write failed' }; } });
 ipcMain.handle('db:backup', async (_event, { targetPath } = {}) => backup(targetPath));
 ipcMain.handle('db:integrity-check', () => integrityCheck());
+ipcMain.handle('auth:authenticate', (_event, { username, secret } = {}) => authenticate(username, secret));
+ipcMain.handle('ai:analyze', (_event, { state } = {}) => analyze(state || {}));
 ipcMain.handle('app:diagnostics', () => ({ ok: true, isDev, platform: process.platform, arch: process.arch, versions: process.versions, logFile }));
 
-app.whenReady().then(() => {
-  log('[MK POS] app ready');
-  installSecurityHeaders();
-  createWindow();
-  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-}).catch(error => log('[MK POS] app startup failed', error));
-
+app.whenReady().then(() => { log('[MK POS] app ready'); installSecurityHeaders(); createWindow(); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); }).catch(error => log('[MK POS] app startup failed', error));
 function safePort(v) { const p = String(v || '').trim().toUpperCase(); return /^COM\d+$/.test(p) ? p : null; }
 async function getComPorts() { if (process.platform !== 'win32') return []; const data = await psJson(`@(Get-CimInstance Win32_SerialPort|%{$_.DeviceID})|ConvertTo-Json -Compress`); const rows = Array.isArray(data) ? data : (data ? [data] : []); return rows.map(s => safePort(s)).filter(Boolean); }
 function bytesFrom(data) { if (Array.isArray(data)) return Buffer.from(data.map(Number).filter(Number.isFinite).map(n => Math.max(0, Math.min(255, n)))); if (Buffer.isBuffer(data)) return data; return Buffer.from(String(data || ''), 'binary'); }
@@ -102,6 +48,5 @@ ipcMain.handle('printer:print', async (_e, { address, data, port, baudRate = 960
 ipcMain.handle('printer:test-serial', async (_e, { address, port, baudRate = 9600, printerName, allPorts = true } = {}) => { const results = []; if (printerName) { const q = await queueSend(printerName, testPayload('WINDOWS-RAW')); results.push(q); if (q.ok && !allPorts) return { ...q, diagnostics: results }; } const ports = [port, ...(allPorts ? await getComPorts() : [])].map(safePort).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i), rates = allPorts ? [Number(baudRate) || 9600, 115200, 460800] : [Number(baudRate) || 9600]; for (const p of ports) for (const rate of [...new Set(rates)]) for (const signals of allPorts ? [{ dtr: false, rts: false }, { dtr: true, rts: true }] : [{ dtr: false, rts: false }]) { const r = await diagnosticComTest(p, rate, signals); results.push(r); if (r.ok) return { ...r, diagnostics: results }; } return { ok: false, transport: 'diagnostic', bluetoothAddress: address || '', error: 'No working serial transport found', diagnostics: results }; });
 ipcMain.handle('printer:print-raw', (_e, { printerName, data } = {}) => queueSend(printerName, data));
 ipcMain.handle('printer:print-html', async () => ({ ok: false, reason: 'html-print-disabled-use-raw' }));
-
 app.on('before-quit', () => { try { close(); } catch (error) { log('[MK POS] database close failed', error); } });
 app.on('window-all-closed', () => { log('[MK POS] all windows closed'); if (process.platform !== 'darwin') app.quit(); });
