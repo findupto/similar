@@ -1,7 +1,7 @@
 {
   "name":"mk-pizza-pos",
   "private":true,
-  "version":"2.1.6",
+  "version":"2.1.7",
   "description":"Standalone POS for MK Pizza & Ice Bar",
   "author":"Findupto",
   "type":"module",
