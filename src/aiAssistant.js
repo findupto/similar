@@ -1,81 +1,50 @@
-const APP_KEY='findupto-pos-v3';
-const DEFAULT_AI_NAME='Findupto AI';
-
-function desktopDb(){return window.mkPosDesktop?.database||null}
-function loadState(){try{const db=desktopDb();if(db?.loadState){const s=db.loadState();if(s)return s}const raw=localStorage.getItem(APP_KEY);return raw?JSON.parse(raw):null}catch{return null}}
-function saveState(state){try{const db=desktopDb();if(db?.saveState){db.saveState(state,'offline-ai');return true}localStorage.setItem(APP_KEY,JSON.stringify(state));return true}catch{return false}}
-function getSettings(state){return state.settings||{name:'Business',currency:'Rs.'}}
-function aiName(state){return String(getSettings(state).aiName||DEFAULT_AI_NAME).trim()||DEFAULT_AI_NAME}
-function role(){return document.querySelector('.user-chip small')?.textContent?.trim()||''}
-function isAdmin(){return /admin|owner/i.test(role())}
-function money(n,state){const cur=getSettings(state).currency||'Rs.';return `${cur} ${Number(n||0).toLocaleString()}`}
-function analyze(state){
-  const products=Array.isArray(state?.products)?state.products:[];
-  const customers=Array.isArray(state?.customers)?state.customers:[];
-  const orders=Array.isArray(state?.heldOrders)?state.heldOrders:[];
-  const sales=Array.isArray(state?.sales)?state.sales:[];
-  const expenses=Array.isArray(state?.expenses)?state.expenses:[];
-  const low=products.filter(p=>p.active!==false&&Number(p.stock||0)<=3&&!p.isDeal);
-  const open=orders.filter(o=>!['COMPLETED','CANCELLED'].includes(o.status));
-  const revenue=sales.reduce((a,s)=>a+Number(s.total||0),0);
-  const expense=expenses.reduce((a,e)=>a+Number(e.amount||0),0);
-  const warnings=[];
-  if(low.length)warnings.push(`${low.length} low-stock product${low.length===1?'':'s'}: ${low.slice(0,5).map(p=>p.name).join(', ')}`);
-  if(open.length)warnings.push(`${open.length} order${open.length===1?'':'s'} still open in the kitchen queue.`);
-  const badPrices=products.filter(p=>!Number.isFinite(Number(p.price))||Number(p.price)<0);
-  if(badPrices.length)warnings.push(`${badPrices.length} product price${badPrices.length===1?'':'s'} need repair.`);
-  return {revenue,expense,open:open.length,low:low.length,customers:customers.length,products:products.length,warnings}
+const APP_KEY='findupto-pos-v3',DEFAULT_AI_NAME='Findupto AI';
+const db=()=>window.mkPosDesktop?.database||null;
+const load=()=>{try{const x=db()?.loadState?.();if(x)return x;const r=localStorage.getItem(APP_KEY);return r?JSON.parse(r):null}catch{return null}};
+const save=s=>{try{if(db()?.saveState){db().saveState(s,'offline-ai');return true}localStorage.setItem(APP_KEY,JSON.stringify(s));return true}catch{return false}};
+const settings=s=>s?.settings||{name:'Business',currency:'Rs.'};
+const name=s=>String(settings(s).aiName||DEFAULT_AI_NAME).trim()||DEFAULT_AI_NAME;
+const role=()=>document.querySelector('.user-chip small')?.textContent?.trim()||'';
+const admin=()=>/admin|owner/i.test(role());
+const n=v=>Number.isFinite(Number(v))?Number(v):0;
+const money=(v,s)=>`${settings(s).currency||'Rs.'} ${n(v).toLocaleString()}`;
+const arr=(s,k)=>Array.isArray(s?.[k])?s[k]:[];
+function scan(s){
+ const products=arr(s,'products'),customers=arr(s,'customers'),orders=arr(s,'heldOrders'),sales=arr(s,'sales'),expenses=arr(s,'expenses'),purchases=arr(s,'purchases'),audit=arr(s,'audit');
+ const issues=[];const warnings=[];const ids=new Set(),skus=new Set(),bars=new Set();
+ products.forEach((p,i)=>{if(!p.id)issues.push(`Product ${i+1} has no ID`);else if(ids.has(p.id))issues.push(`Duplicate product ID: ${p.id}`);ids.add(p.id);if(p.sku){if(skus.has(p.sku))issues.push(`Duplicate SKU: ${p.sku}`);skus.add(p.sku)}if(p.barcode){if(bars.has(p.barcode))issues.push(`Duplicate barcode: ${p.barcode}`);bars.add(p.barcode)}if(!p.name)issues.push(`Product ${p.id||i+1} has no name`);if(n(p.price)<0||n(p.cost)<0||n(p.stock)<0)issues.push(`Invalid negative value on ${p.name||p.id}`);if(p.active!==false&&n(p.stock)<=3&&!p.isDeal)warnings.push(`Low stock: ${p.name||p.id} (${n(p.stock)})`)});
+ const pids=new Set(products.map(p=>p.id));const cids=new Set(customers.map(c=>c.id));
+ const checkOrder=(o,type)=>{(Array.isArray(o.items)?o.items:[]).forEach(i=>{if(i.productId&&!pids.has(i.productId))issues.push(`${type} ${o.invoice||o.id||''} references missing product ${i.productId}`);if(n(i.qty)<=0)issues.push(`${type} ${o.invoice||o.id||''} has invalid quantity`)})};
+ orders.forEach(o=>checkOrder(o,'Order'));sales.forEach(o=>checkOrder(o,'Sale'));orders.forEach(o=>{if(o.customerId&&!cids.has(o.customerId)&&o.customerId!=='C-001')warnings.push(`Order ${o.invoice||o.id} references an unknown customer`)});
+ const revenue=sales.reduce((a,x)=>a+n(x.total),0),expense=expenses.reduce((a,x)=>a+n(x.amount),0),purchase=purchases.reduce((a,x)=>a+n(x.total),0),open=orders.filter(o=>!['COMPLETED','CANCELLED'].includes(o.status));
+ if(!settings(s).name)issues.push('Business name is missing');
+ return {products,customers,orders,sales,expenses,purchases,audit,issues,warnings,revenue,expense,purchase,open};
 }
-function repair(state){
-  const next=JSON.parse(JSON.stringify(state||{}));
-  const changes=[]; const now=new Date().toISOString();
-  if(!Array.isArray(next.products))next.products=[];
-  if(!Array.isArray(next.customers))next.customers=[];
-  if(!Array.isArray(next.heldOrders))next.heldOrders=[];
-  if(!Array.isArray(next.sales))next.sales=[];
-  if(!Array.isArray(next.expenses))next.expenses=[];
-  if(!Array.isArray(next.audit))next.audit=[];
-  if(!next.settings)next.settings={name:'Business',currency:'Rs.'};
-  const seen=new Set();
-  next.products=next.products.map((p,i)=>{
-    const x={...p};
-    if(!x.id){x.id=`AI-PRD-${i+1}`;changes.push(`Added missing product ID to ${x.name||'product '+(i+1)}`)}
-    if(!x.name){x.name=`Unnamed Product ${i+1}`;changes.push(`Named an unnamed product as ${x.name}`)}
-    x.price=Math.max(0,Number.isFinite(Number(x.price))?Number(x.price):0);
-    x.cost=Math.max(0,Number.isFinite(Number(x.cost))?Number(x.cost):0);
-    x.stock=Math.max(0,Number.isFinite(Number(x.stock))?Number(x.stock):0);
-    const key=String(x.id);if(seen.has(key)){x.id=`${key}-AI-${i+1}`;changes.push(`Fixed duplicate product ID for ${x.name}`)}seen.add(x.id);return x;
-  });
-  const customerIds=new Set(next.customers.map(c=>c.id));
-  next.customers=next.customers.map((c,i)=>({...c,id:c.id||`AI-CUS-${i+1}`,name:c.name||`Customer ${i+1}`,balance:Math.max(0,Number(c.balance)||0)}));
-  const validProducts=new Set(next.products.map(p=>p.id));
-  const validCustomers=new Set(next.customers.map(c=>c.id));
-  const fixItems=o=>({...o,items:(Array.isArray(o.items)?o.items:[]).filter(i=>validProducts.has(i.productId)).map(i=>({...i,qty:Math.max(0,Number(i.qty)||0),price:Math.max(0,Number(i.price)||0),total:Math.max(0,Number(i.qty)||0)*Math.max(0,Number(i.price)||0)}))});
-  next.heldOrders=next.heldOrders.map(fixItems).filter(o=>o.items.length||o.status==='CANCELLED');
-  next.sales=next.sales.map(fixItems).filter(o=>o.items.length);
-  next.settings.aiName=aiName(next); next.settings.aiInstructions=String(next.settings.aiInstructions||'');
-  if(changes.length)next.audit.push({id:`AI-${Date.now()}`,date:now,action:`${aiName(next)} automatically repaired ${changes.length} data issue${changes.length===1?'':'s'}`,by:'offline-ai'});
-  saveState(next);return {state:next,changes}
+function repair(s){
+ const x=JSON.parse(JSON.stringify(s||{})),changes=[];['products','customers','heldOrders','sales','expenses','purchases','audit','inventoryMoves','payments','deals','suppliers','staff','accounts'].forEach(k=>{if(!Array.isArray(x[k])){x[k]=[];changes.push(`Restored missing ${k} collection`)}});if(!x.settings)x.settings={name:'Business',currency:'Rs.'};
+ const seen=new Set();x.products=x.products.map((p,i)=>{const q={...p};if(!q.id){q.id=`AI-PRD-${i+1}`;changes.push(`Generated ID for ${q.name||'product '+(i+1)}`)}if(seen.has(q.id)){q.id=`${q.id}-AI-${i+1}`;changes.push(`Repaired duplicate product ID for ${q.name||q.id}`)}seen.add(q.id);if(!q.name){q.name=`Unnamed Product ${i+1}`;changes.push(`Named unnamed product ${q.id}`)}q.price=Math.max(0,n(q.price));q.cost=Math.max(0,n(q.cost));q.stock=Math.max(0,n(q.stock));return q});
+ const pids=new Set(x.products.map(p=>p.id));x.customers=x.customers.map((c,i)=>({...c,id:c.id||`AI-CUS-${i+1}`,name:c.name||`Customer ${i+1}`,balance:Math.max(0,n(c.balance)),points:Math.max(0,n(c.points))}));
+ const fix=o=>({...o,items:(Array.isArray(o.items)?o.items:[]).filter(i=>!i.productId||pids.has(i.productId)).map(i=>({...i,qty:Math.max(0,n(i.qty)),price:Math.max(0,n(i.price)),total:Math.max(0,n(i.qty))*Math.max(0,n(i.price))}))});
+ x.heldOrders=x.heldOrders.map(fix).filter(o=>o.items.length||o.status==='CANCELLED');x.sales=x.sales.map(fix).filter(o=>o.items.length);
+ x.settings.aiName=name(x);x.settings.aiInstructions=String(x.settings.aiInstructions||'');
+ if(changes.length)x.audit.push({id:`AI-${Date.now()}`,date:new Date().toLocaleString(),action:`${name(x)} auto-repaired ${changes.length} safe issue${changes.length===1?'':'s'}`,by:'offline-ai'});save(x);return{x,changes};
 }
-function reply(text,state){
-  const s=analyze(state);const instructions=String(getSettings(state).aiInstructions||'').trim();
-  const t=text.toLowerCase();
-  if(/repair|fix|clean|problem|issue|error|broken/.test(t)){const r=repair(state);return {state:r.state,text:r.changes.length?`I fixed ${r.changes.length} safe data issue${r.changes.length===1?'':'s'} automatically. ${r.changes.slice(0,5).join('; ')}.`:'I checked the POS data and found no safe automatic repairs needed.'}}
-  if(/stock|inventory|low/.test(t))return {state,text:s.low?`There are ${s.low} low-stock products. ${s.warnings.find(w=>w.includes('low-stock'))||''}`:'No active product is currently at or below the low-stock threshold of 3.'}
-  if(/sales|revenue|profit|earning/.test(t))return {state,text:`Recorded sales: ${money(s.revenue,state)}. Recorded expenses: ${money(s.expense,state)}. Difference: ${money(s.revenue-s.expense,state)}.`}
-  if(/order|kitchen|queue/.test(t))return {state,text:s.open?`${s.open} order${s.open===1?'':'s'} remain open in the kitchen queue.`:'The kitchen queue is clear.'}
-  if(/customer/.test(t))return {state,text:`There are ${s.customers} customers in the POS database.`}
-  if(/instruction|policy|rule/.test(t))return {state,text:isAdmin()?`Your admin instructions are active: ${instructions||'No custom instructions have been set.'}`:'Only an Admin or Owner can manage AI instructions.'}
-  return {state,text:`I am your offline POS assistant. I can help with sales, stock, orders, customers, reports, data cleanup and safe automatic repairs. I do not send your business data to an online AI service.${instructions?' I am also following the admin instructions configured for this store.':''}`}
+function auto(s){const before=scan(s),r=repair(s),after=scan(r.x);return{...r,before,after};}
+function answer(q,s){const t=String(q||'').toLowerCase().trim(),a=scan(s),inst=String(settings(s).aiInstructions||'').trim();
+ if(/auto.?fix|fix|repair|clean|heal|broken|issue|error/.test(t)){const r=auto(s);return{state:r.x,text:r.changes.length?`Done. I safely repaired ${r.changes.length} issue${r.changes.length===1?'':'s'}. I also rescanned the database. ${r.after.issues.length?`${r.after.issues.length} issue(s) still need review because they are not safe to change automatically.`:'The integrity scan is clean.'}`:'I scanned the complete local POS database. No safe automatic repair was required.'}};
+ if(/health|audit|check|diagnos|status/.test(t))return{state:s,text:`System health: ${a.issues.length?'⚠ '+a.issues.length+' issue(s)':'✓ no integrity issues'}. ${a.warnings.length} operational warning(s). ${a.products.length} products, ${a.customers.length} customers, ${a.open.length} open orders.`};
+ if(/sales|revenue|income|profit|earning/.test(t))return{state:s,text:`Recorded sales ${money(a.revenue,s)} · expenses ${money(a.expense,s)} · purchases ${money(a.purchase,s)} · sales-minus-expenses ${money(a.revenue-a.expense,s)}.`};
+ if(/stock|inventory|low stock/.test(t))return{state:s,text:a.warnings.filter(x=>x.startsWith('Low stock')).length?`Low-stock alert: ${a.warnings.filter(x=>x.startsWith('Low stock')).slice(0,8).join('; ')}.`:'Inventory looks healthy at the configured threshold.'};
+ if(/order|kitchen|queue|pending/.test(t))return{state:s,text:a.open.length?`${a.open.length} order(s) are active. ${a.open.slice(0,6).map(o=>`${o.invoice||o.id}: ${o.status}`).join(' · ')}`:'Kitchen queue is clear.'};
+ if(/customer|client/.test(t))return{state:s,text:`${a.customers.length} customers are stored locally. Total outstanding balance: ${money(a.customers.reduce((z,c)=>z+n(c.balance),0),s)}.`};
+ if(/report|summary|business/.test(t))return{state:s,text:`Business summary: ${a.products.length} products, ${a.customers.length} customers, ${a.sales.length} sales, ${money(a.revenue,s)} recorded revenue, ${money(a.expense,s)} expenses, ${a.open.length} open orders. ${a.warnings.slice(0,3).join(' ')}`};
+ if(/instruction|policy|rule/.test(t))return{state:s,text:admin()?`Admin instructions are active: ${inst||'none configured.'}`:'Only Admin/Owner can view or change AI instructions.'};
+ return{state:s,text:`I am ${name(s)}, the offline operations AI. I can continuously monitor POS data, diagnose integrity problems, repair safe data errors, explain sales/inventory/orders/customers, follow admin instructions, and maintain an audit trail. I work locally and do not require an online AI service.${inst?' Admin instructions are active.':''}`};
 }
-
-const css=`#offline-ai-root{position:fixed;right:20px;bottom:20px;z-index:99999;font-family:Arial,Helvetica,sans-serif}#offline-ai-root *{box-sizing:border-box}.oai-fab{border:0;border-radius:999px;padding:12px 16px;background:linear-gradient(135deg,#7c5cff,#a568ff);color:#fff;font-weight:800;box-shadow:0 12px 35px #0005;cursor:pointer}.oai-panel{width:380px;max-width:calc(100vw - 30px);height:560px;max-height:calc(100vh - 40px);background:#111620;color:#eef2f7;border:1px solid #30384a;border-radius:18px;box-shadow:0 24px 70px #0008;display:flex;flex-direction:column;overflow:hidden}.oai-head{padding:15px 16px;border-bottom:1px solid #2a3240;display:flex;align-items:center;gap:10px}.oai-head b{flex:1}.oai-head button,.oai-mini{border:1px solid #30384a;background:#171d29;color:#eef2f7;border-radius:8px;padding:7px;cursor:pointer}.oai-body{padding:14px;overflow:auto;flex:1}.oai-msg{padding:10px 12px;border-radius:12px;background:#171d29;margin-bottom:9px;font-size:12px;line-height:1.55}.oai-user{background:#7c5cff22}.oai-actions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}.oai-actions button{border:1px solid #30384a;background:#171d29;color:#bdb3ff;border-radius:8px;padding:7px 9px;font-size:11px;cursor:pointer}.oai-compose{padding:10px;border-top:1px solid #2a3240;display:flex;gap:7px}.oai-compose input{min-width:0;flex:1;background:#171d29;border:1px solid #30384a;color:#fff;border-radius:9px;padding:10px;outline:0}.oai-compose button{border:0;border-radius:9px;background:#7c5cff;color:#fff;padding:0 13px;font-weight:800}.oai-admin{margin-top:10px;padding-top:10px;border-top:1px solid #2a3240}.oai-admin label{display:block;font-size:10px;color:#8c97a9;margin-bottom:5px}.oai-admin input,.oai-admin textarea{width:100%;background:#171d29;color:#fff;border:1px solid #30384a;border-radius:8px;padding:8px;margin-bottom:7px}.oai-admin textarea{height:65px;resize:vertical}.oai-save{width:100%;padding:8px;border:0;border-radius:8px;background:#24d6a5;color:#061710;font-weight:800}.oai-status{font-size:10px;color:#8c97a9;margin-top:6px}`;
-function mount(){if(document.getElementById('offline-ai-root'))return;const style=document.createElement('style');style.textContent=css;document.head.appendChild(style);const root=document.createElement('div');root.id='offline-ai-root';document.body.appendChild(root);let open=false;let state=loadState()||{};
- const render=()=>{state=loadState()||state;const name=aiName(state);const admin=isAdmin();root.innerHTML=open?`<div class="oai-panel"><div class="oai-head"><span>✦</span><b>${escapeHtml(name)} · Offline</b><button id="oai-close">×</button></div><div class="oai-body" id="oai-body"><div class="oai-msg"><b>Ready.</b><br/>I work locally with this POS and can assist the counter person without internet.</div><div class="oai-actions"><button data-q="Check sales">Sales</button><button data-q="Check stock">Stock</button><button data-q="Check orders">Kitchen</button><button data-q="Fix all issues">Auto-fix</button></div>${admin?`<div class="oai-admin"><label>AI NAME (Admin / Owner)</label><input id="oai-name" value="${escapeAttr(name)}"><label>AI INSTRUCTIONS FOR THIS STORE</label><textarea id="oai-instructions" placeholder="Tell the AI how this business wants it to behave...">${escapeHtml(String(getSettings(state).aiInstructions||''))}</textarea><button class="oai-save" id="oai-save">Save AI settings</button><div class="oai-status">Instructions are stored locally with the POS business settings.</div></div>`:''}</div><div class="oai-compose"><input id="oai-input" placeholder="Ask anything about this POS…"><button id="oai-send">Send</button></div></div>`:`<button class="oai-fab">✦ ${escapeHtml(name)}</button>`;
- root.querySelector('.oai-fab')?.addEventListener('click',()=>{open=true;render()});root.querySelector('#oai-close')?.addEventListener('click',()=>{open=false;render()});root.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));root.querySelector('#oai-send')?.addEventListener('click',()=>ask(root.querySelector('#oai-input')?.value||''));root.querySelector('#oai-input')?.addEventListener('keydown',e=>{if(e.key==='Enter')ask(e.target.value)});root.querySelector('#oai-save')?.addEventListener('click',()=>{if(!isAdmin())return;const n=root.querySelector('#oai-name')?.value?.trim()||DEFAULT_AI_NAME;const inst=root.querySelector('#oai-instructions')?.value||'';const next=loadState()||state;next.settings={...(next.settings||{}),aiName:n,aiInstructions:inst};saveState(next);state=next;render()});};
- const ask=q=>{if(!String(q).trim())return;const body=root.querySelector('#oai-body');if(!body)return;const u=document.createElement('div');u.className='oai-msg oai-user';u.textContent=String(q);body.appendChild(u);const r=reply(String(q),loadState()||state);state=r.state||state;const a=document.createElement('div');a.className='oai-msg';a.textContent=r.text;body.appendChild(a);body.scrollTop=body.scrollHeight;};
- render();setInterval(()=>{if(open){const n=aiName(loadState()||state);if(!root.querySelector('.oai-head b')?.textContent?.startsWith(n))render()}},2000);
-}
-function escapeHtml(v){return String(v??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
-function escapeAttr(v){return escapeHtml(v).replace(/"/g,'&quot;')}
+const css=`#offline-ai-root{position:fixed;right:20px;bottom:20px;z-index:99999;font-family:Arial,sans-serif}#offline-ai-root *{box-sizing:border-box}.oai-fab{border:0;border-radius:999px;padding:12px 17px;background:linear-gradient(135deg,#7c5cff,#a568ff);color:#fff;font-weight:800;box-shadow:0 12px 35px #0006;cursor:pointer}.oai-panel{width:410px;max-width:calc(100vw - 30px);height:610px;max-height:calc(100vh - 30px);background:#111620;color:#eef2f7;border:1px solid #30384a;border-radius:18px;box-shadow:0 24px 70px #0008;display:flex;flex-direction:column;overflow:hidden}.oai-head{padding:14px 16px;border-bottom:1px solid #2a3240;display:flex;align-items:center;gap:9px}.oai-head b{flex:1}.oai-head button,.oai-mini{border:1px solid #30384a;background:#171d29;color:#eef2f7;border-radius:8px;padding:7px;cursor:pointer}.oai-body{padding:13px;overflow:auto;flex:1}.oai-msg{padding:10px 12px;border-radius:12px;background:#171d29;margin-bottom:8px;font-size:12px;line-height:1.55}.oai-user{background:#7c5cff22}.oai-actions{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 12px}.oai-actions button{border:1px solid #30384a;background:#171d29;color:#bdb3ff;border-radius:8px;padding:7px 9px;font-size:11px;cursor:pointer}.oai-compose{padding:9px;border-top:1px solid #2a3240;display:flex;gap:7px}.oai-compose input{min-width:0;flex:1;background:#171d29;border:1px solid #30384a;color:#fff;border-radius:9px;padding:10px;outline:0}.oai-compose button{border:0;border-radius:9px;background:#7c5cff;color:#fff;padding:0 13px;font-weight:800}.oai-admin{margin-top:10px;padding-top:10px;border-top:1px solid #2a3240}.oai-admin label{display:block;font-size:10px;color:#8c97a9;margin:5px 0}.oai-admin input,.oai-admin textarea{width:100%;background:#171d29;color:#fff;border:1px solid #30384a;border-radius:8px;padding:8px}.oai-admin textarea{height:70px;resize:vertical}.oai-save{width:100%;padding:8px;border:0;border-radius:8px;background:#24d6a5;color:#061710;font-weight:800;margin-top:7px}.oai-status{font-size:10px;color:#8c97a9;margin-top:6px}.oai-health{padding:9px;border:1px solid #30384a;border-radius:10px;margin-bottom:10px;font-size:11px}.oai-health.good{color:#5ee0ba}.oai-health.warn{color:#ffca67}`;
+function esc(v){return String(v??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}function attr(v){return esc(v).replace(/"/g,'&quot;')}
+function mount(){if(document.getElementById('offline-ai-root'))return;const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);const root=document.createElement('div');root.id='offline-ai-root';document.body.appendChild(root);let open=false,state=load()||{};
+ const render=()=>{state=load()||state;const a=scan(state),nm=name(state),isA=admin();root.innerHTML=open?`<div class="oai-panel"><div class="oai-head"><span>✦</span><b>${esc(nm)} · Offline</b><button id="oai-close">×</button></div><div class="oai-body" id="oai-body"><div class="oai-health ${a.issues.length?'warn':'good'}">${a.issues.length?'⚠ '+a.issues.length+' integrity issue(s)':'✓ POS integrity healthy'} · ${a.warnings.length} operational warning(s)</div><div class="oai-msg"><b>Autonomous mode ready.</b><br/>I monitor the local POS, diagnose problems and can safely repair data without internet.</div><div class="oai-actions"><button data-q="Health check">Health</button><button data-q="Business summary">Summary</button><button data-q="Check sales">Sales</button><button data-q="Check inventory">Inventory</button><button data-q="Check kitchen orders">Kitchen</button><button data-q="Fix all issues">Auto-fix</button></div>${isA?`<div class="oai-admin"><label>AI NAME — ADMIN / OWNER</label><input id="oai-name" value="${attr(nm)}"><label>ADMIN AI INSTRUCTIONS</label><textarea id="oai-instructions" placeholder="Business rules, priorities, tone and operating instructions">${esc(String(settings(state).aiInstructions||''))}</textarea><button class="oai-save" id="oai-save">Save AI Configuration</button><div class="oai-status">Stored locally with business settings. The offline assistant never sends POS data to an online AI.</div></div>`:''}</div><div class="oai-compose"><input id="oai-input" placeholder="Ask the AI to check, explain or fix…"><button id="oai-send">Send</button></div></div>`:`<button class="oai-fab">✦ ${esc(nm)}</button>`;
+ root.querySelector('.oai-fab')?.addEventListener('click',()=>{open=true;render()});root.querySelector('#oai-close')?.addEventListener('click',()=>{open=false;render()});root.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>ask(b.dataset.q)));root.querySelector('#oai-send')?.addEventListener('click',()=>ask(root.querySelector('#oai-input')?.value||''));root.querySelector('#oai-input')?.addEventListener('keydown',e=>{if(e.key==='Enter')ask(e.target.value)});root.querySelector('#oai-save')?.addEventListener('click',()=>{if(!admin())return;const next=load()||state;next.settings={...(next.settings||{}),aiName:root.querySelector('#oai-name')?.value?.trim()||DEFAULT_AI_NAME,aiInstructions:root.querySelector('#oai-instructions')?.value||''};save(next);state=next;render()})};
+ const ask=q=>{if(!String(q).trim())return;const body=root.querySelector('#oai-body');if(!body)return;const u=document.createElement('div');u.className='oai-msg oai-user';u.textContent=q;body.appendChild(u);const r=answer(q,load()||state);state=r.state||state;const a=document.createElement('div');a.className='oai-msg';a.textContent=r.text;body.appendChild(a);body.scrollTop=body.scrollHeight;};render();setInterval(()=>{if(open){const fresh=load()||state;if(scan(fresh).issues.length!==scan(state).issues.length)render()}},3000)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
