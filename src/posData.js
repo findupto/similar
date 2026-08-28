@@ -9,10 +9,10 @@ export const uid=p=>`${p}-${Date.now()}-${Math.random().toString(36).slice(2,7)}
 export const today=()=>new Date().toLocaleString();
 export const money=n=>`${DEFAULT_BUSINESS.currency} ${Number(n||0).toLocaleString()}`;
 export const parseCSV=text=>{const rows=[];let row=[],cell='',quoted=false;const input=String(text??'').replace(/^\uFEFF/,'');for(let i=0;i<input.length;i++){const c=input[i],n=input[i+1];if(c==='"'&&quoted&&n==='"'){cell+='"';i++;continue}if(c==='"'){quoted=!quoted;continue}if(c===','&&!quoted){row.push(cell);cell='';continue}if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&n==='\n')i++;row.push(cell);cell='';if(row.some(v=>String(v).trim()!==''))rows.push(row);row=[];continue}cell+=c}if(cell!==''||row.length){row.push(cell);if(row.some(v=>String(v).trim()!==''))rows.push(row)}return rows};
-export const downloadText=(filename,text,mime='text/plain')=>{const blob=new Blob([String(text??'')],{type:`${mime};charset=utf-8`});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-export const variantsOf=p=>Array.isArray(p?.variants)?p.variants:[];
+export const downloadText=(filename,text,mime='text/plain')=>{const blob=new Blob([String(text??'')],{type:`${mime};charset=utf-8`});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+export const variantsOf=p=>{const variants=Array.isArray(p?.variants)?p.variants:Array.isArray(p?.variantOptions)?p.variantOptions:[];return variants.filter(Boolean)};
 export const hasVariants=p=>variantsOf(p).some(v=>v?.active!==false);
 export const variantPrice=(p,v)=>Number(v?.price??p?.price??0);
-export const variantStock=(p,v)=>Math.max(0,Number(v?.stock??0));
+export const variantStock=(p,v)=>{const raw=v?.stock;if(raw===undefined||raw===null||String(raw).trim()==='')return Math.max(0,Number(p?.stock||0));return Math.max(0,Number(raw||0))};
 export const loadState=()=>{try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}};
 export const saveState=s=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s));return true}catch{return false}};
