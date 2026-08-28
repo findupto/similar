@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 const db = {
-  loadState: () => ipcRenderer.invoke('db:load-state'),
-  saveState: (state, actor) => ipcRenderer.invoke('db:save-state', { state, actor }),
+  loadState: () => ipcRenderer.sendSync('db:load-state-sync'),
+  saveState: (state, actor) => ipcRenderer.sendSync('db:save-state-sync', { state, actor }),
   backup: (targetPath) => ipcRenderer.invoke('db:backup', { targetPath })
 };
 
