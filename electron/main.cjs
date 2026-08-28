@@ -2,152 +2,16 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
-
-const isDev = !app.isPackaged;
-const isDebug = process.argv.includes('--debug');
-let win;
-
+const isDev = !app.isPackaged; const isDebug = process.argv.includes('--debug'); let win;
 if (isDebug) app.commandLine.appendSwitch('enable-logging');
-
-function powershell(script) {
-  return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { windowsHide: true }, (err, stdout) => {
-      if (err) return resolve([]);
-      try { resolve(JSON.parse(stdout || '[]')); } catch { resolve([]); }
-    });
-  });
-}
-
-async function listWindowsPrinters() {
-  if (process.platform !== 'win32') return [];
-  const ps = `
-    $items = @();
-    try {
-      $items += @(Get-CimInstance Win32_SerialPort | ForEach-Object {
-        [pscustomobject]@{ id=$_.DeviceID; name=$_.Name; description=$_.Description; port=$_.DeviceID; type='COM / Bluetooth SPP'; pnp=$_.PNPDeviceID }
-      });
-    } catch {}
-    try {
-      $items += @(Get-Printer | ForEach-Object {
-        [pscustomobject]@{ id=$_.Name; name=$_.Name; description=$_.DriverName; port=$_.PortName; type='Windows Printer'; pnp='' }
-      });
-    } catch {}
-    $items | ConvertTo-Json -Compress;
-  `;
-  const data = await powershell(ps);
-  const rows = Array.isArray(data) ? data : (data && (data.id || data.name) ? [data] : []);
-  const seen = new Set();
-  return rows.filter(x => {
-    const key = `${x.id}|${x.port}`;
-    if (seen.has(key)) return false;
-    seen.add(key); return true;
-  });
-}
-
-function showLoadError(details) {
-  if (!win || win.isDestroyed()) return;
-  const safe = String(details || 'Unknown renderer error').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  win.loadURL(`data:text/html;charset=utf-8,<!doctype html><html><body style="font-family:Segoe UI;padding:40px;background:#f6f7fb;color:#222"><h2>MK Pizza & Ice Bar POS could not load</h2><p>${safe}</p><p>Run the application with <b>--debug</b> to open diagnostics.</p></body></html>`);
-}
-
-function createWindow() {
-  win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 680,
-    show: false,
-    backgroundColor: '#f6f7fb',
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-
-  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    if (isDebug) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
-  });
-
-  win.webContents.on('render-process-gone', (_event, details) => {
-    console.error(`POS renderer exited: ${details.reason || 'unknown'} ${details.exitCode ?? ''}`);
-    if (!isDebug) showLoadError(`Renderer process exited: ${details.reason || 'unknown'}`);
-  });
-
-  win.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
-    console.error(`POS failed to load: ${code} ${description} ${validatedURL || ''}`);
-    if (!isDev) showLoadError(`${code} ${description}<br><small>${validatedURL || ''}</small>`);
-  });
-
-  win.webContents.on('did-finish-load', () => {
-    if (isDebug) {
-      console.log(`POS loaded: ${win.webContents.getURL()}`);
-      win.webContents.openDevTools({ mode: 'detach' });
-    }
-  });
-
-  win.once('ready-to-show', () => win.show());
-
-  win.webContents.on('select-bluetooth-device', (event, devices, callback) => {
-    event.preventDefault();
-    const device = devices.find(d => d.deviceName && d.deviceName.trim()) || devices[0];
-    callback(device ? device.deviceId : '');
-  });
-
-  win.webContents.session.setBluetoothPairingHandler((_details, callback) => {
-    callback({ confirmed: true });
-  });
-
-  if (isDev) {
-    win.loadURL('http://127.0.0.1:5173').catch(() => {
-      let attempts = 0;
-      const retry = setInterval(() => {
-        attempts += 1;
-        win.loadURL('http://127.0.0.1:5173').then(() => clearInterval(retry)).catch(() => {
-          if (attempts >= 30) clearInterval(retry);
-        });
-      }, 500);
-    });
-  } else {
-    const renderer = path.join(__dirname, '..', 'dist', 'index.html');
-    const rendererUrl = pathToFileURL(renderer).href;
-    console.log(`POS renderer: ${renderer}`);
-    console.log(`POS renderer URL: ${rendererUrl}`);
-    win.loadURL(rendererUrl).catch(err => showLoadError(err.message));
-  }
-}
-
-app.whenReady().then(() => {
-  createWindow();
-  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
-});
-
-require('electron').ipcMain.handle('printer:print-html', async (_event, { printerName, html }) => {
-  if (!printerName || process.platform !== 'win32') return { ok:false, reason:'windows-printer-unavailable' };
-  return new Promise(async resolve => {
-    let printWin;
-    try {
-      printWin = new BrowserWindow({show:false, width:302, height:1000, webPreferences:{contextIsolation:true,nodeIntegration:false}});
-      await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html || ''));
-      printWin.webContents.print({silent:true, printBackground:false, deviceName:printerName}, (success, reason) => {
-        if (printWin && !printWin.isDestroyed()) printWin.close();
-        resolve(success ? {ok:true} : {ok:false, reason:reason || 'print-failed'});
-      });
-    } catch (err) {
-      if (printWin && !printWin.isDestroyed()) printWin.close();
-      resolve({ok:false, reason:String(err.message || err)});
-    }
-  });
-});
-
-require('electron').ipcMain.handle('printer:list', () => listWindowsPrinters());
-
-require('electron').ipcMain.handle('printer:print', async (_event, { port, data, baudRate }) => {
-  if (!port || process.platform !== 'win32') return { ok: false, reason: 'native-port-unavailable' };
-  const encoded = Buffer.from(data, 'utf8').toString('base64');
-  const rate = Number(baudRate) || 9600;\n  const ps = `$b=[Convert]::FromBase64String('${encoded}'); $p=New-Object System.IO.Ports.SerialPort '${port}',${rate},None,8,one; $p.ReadTimeout=250; $p.WriteTimeout=1000; $p.Open(); $p.Write($b,0,$b.Length); $p.BaseStream.Flush(); Start-Sleep -Milliseconds 15; $p.Close();`;
-  return new Promise(resolve => execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', ps], { windowsHide:true }, err => resolve(err ? {ok:false,reason:err.message} : {ok:true})));
-});
-
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+function powershell(script){return new Promise(resolve=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{windowsHide:true},(err,stdout)=>{if(err)return resolve([]);try{resolve(JSON.parse(stdout||'[]'))}catch{resolve([])}}))}
+async function listWindowsPrinters(){if(process.platform!=='win32')return[];const ps=`$items=@();try{$items+=@(Get-CimInstance Win32_SerialPort|%{[pscustomobject]@{id=$_.DeviceID;name=$_.Name;description=$_.Description;port=$_.DeviceID;type='COM / Bluetooth SPP'}})}catch{};try{$items+=@(Get-Printer|%{[pscustomobject]@{id=$_.Name;name=$_.Name;description=$_.DriverName;port=$_.PortName;type='Windows Printer';printerName=$_.Name}})}catch{};$items|ConvertTo-Json -Compress;`;const data=await powershell(ps);const rows=Array.isArray(data)?data:(data&&(data.id||data.name)?[data]:[]);const seen=new Set();return rows.filter(x=>{const k=`${x.id}|${x.port}`;if(seen.has(k))return false;seen.add(k);return true})}
+function showLoadError(details){if(!win||win.isDestroyed())return;const safe=String(details||'Unknown').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));win.loadURL(`data:text/html;charset=utf-8,<!doctype html><body style="font-family:Segoe UI;padding:40px"><h2>MK Pizza POS could not load</h2><p>${safe}</p></body>`)}
+function createWindow(){win=new BrowserWindow({width:1440,height:900,minWidth:1024,minHeight:680,show:false,backgroundColor:'#f6f7fb',autoHideMenuBar:true,webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false}});win.once('ready-to-show',()=>win.show());win.webContents.on('select-bluetooth-device',(e,devices,cb)=>{e.preventDefault();const d=devices.find(x=>x.deviceName?.trim())||devices[0];cb(d?d.deviceId:'')});win.webContents.session.setBluetoothPairingHandler((_d,cb)=>cb({confirmed:true}));if(isDev){win.loadURL('http://127.0.0.1:5173').catch(()=>{let n=0;const t=setInterval(()=>{n++;win.loadURL('http://127.0.0.1:5173').then(()=>clearInterval(t)).catch(()=>{if(n>=30)clearInterval(t)})},500)})}else{const u=pathToFileURL(path.join(__dirname,'..','dist','index.html')).href;win.loadURL(u).catch(e=>showLoadError(e.message))}}
+app.whenReady().then(()=>{createWindow();app.on('activate',()=>{if(!BrowserWindow.getAllWindows().length)createWindow()})});
+const {ipcMain}=require('electron');
+ipcMain.handle('printer:list',()=>listWindowsPrinters());
+ipcMain.handle('printer:print',async(_e,{port,data,baudRate})=>{if(!port||process.platform!=='win32')return{ok:false};const b=Buffer.from(data,'binary').toString('base64'),rate=Number(baudRate)||115200,ps=`$b=[Convert]::FromBase64String('${b}');$p=New-Object System.IO.Ports.SerialPort '${port}',${rate},None,8,one;$p.Open();$p.Write($b,0,$b.Length);$p.BaseStream.Flush();$p.Close();`;return new Promise(resolve=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',ps],{windowsHide:true},err=>resolve(err?{ok:false,reason:err.message}:{ok:true})))});
+ipcMain.handle('printer:print-raw',async(_e,{printerName,data})=>{if(!printerName||process.platform!=='win32')return{ok:false,reason:'printer-unavailable'};const b=Buffer.from(data,'binary').toString('base64');const safe=printerName.replace(/'/g,"''");const ps=`Add-Type -TypeDefinition @'\nusing System;using System.Runtime.InteropServices;public class RawPrinter{[StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]public class DOCINFO{public string pDocName;public string pOutputFile;public string pDataType;}[DllImport("winspool.drv",EntryPoint="OpenPrinterW",SetLastError=true,CharSet=CharSet.Unicode)]public static extern bool OpenPrinter(string n,out IntPtr h,IntPtr p);[DllImport("winspool.drv",SetLastError=true)]public static extern bool ClosePrinter(IntPtr h);[DllImport("winspool.drv",CharSet=CharSet.Unicode,SetLastError=true)]public static extern bool StartDocPrinter(IntPtr h,int l,DOCINFO d);[DllImport("winspool.drv",SetLastError=true)]public static extern bool EndDocPrinter(IntPtr h);[DllImport("winspool.drv",SetLastError=true)]public static extern bool StartPagePrinter(IntPtr h);[DllImport("winspool.drv",SetLastError=true)]public static extern bool EndPagePrinter(IntPtr h);[DllImport("winspool.drv",SetLastError=true)]public static extern bool WritePrinter(IntPtr h,byte[] b,int c,out int w);public static bool Send(string n,byte[] b){IntPtr h;if(!OpenPrinter(n,out h,IntPtr.Zero))return false;var d=new DOCINFO();d.pDocName="MK Pizza POS Receipt";d.pDataType="RAW";bool ok=StartDocPrinter(h,1,d)&&StartPagePrinter(h);int w;ok=ok&&WritePrinter(h,b,b.Length,out w);ok=ok&&EndPagePrinter(h)&&EndDocPrinter(h);ClosePrinter(h);return ok;}}\n'@;$b=[Convert]::FromBase64String('${b}');if(-not [RawPrinter]::Send('${safe}',$b)){throw 'Raw print failed'}`;return new Promise(resolve=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',ps],{windowsHide:true},err=>resolve(err?{ok:false,reason:err.message}:{ok:true})))});
+ipcMain.handle('printer:print-html',async(_e,{printerName,html})=>{if(!printerName||process.platform!=='win32')return{ok:false};return{ok:false,reason:'html-print-disabled-use-raw'}});
+app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit()});
