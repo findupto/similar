@@ -21,7 +21,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "better-sqlite3": "11.10.0",
+    "better-sqlite3": "13.0.3",
     "iconv-lite": "0.6.3",
     "lucide-react": "0.468.0",
     "react": "19.0.0",
@@ -65,9 +65,7 @@
       "artifactName": "Findupto-AI-POS-${version}-${arch}-Portable.exe"
     }
   },
-  "allowScripts": {
-    "electron@34.3.3": true,
-    "esbuild@0.24.2": true,
-    "better-sqlite3@11.10.0": true
+  "engines": {
+    "node": ">=20 <25"
   }
 }
