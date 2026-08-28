@@ -123,6 +123,24 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 
+require('electron').ipcMain.handle('printer:print-html', async (_event, { printerName, html }) => {
+  if (!printerName || process.platform !== 'win32') return { ok:false, reason:'windows-printer-unavailable' };
+  return new Promise(async resolve => {
+    let printWin;
+    try {
+      printWin = new BrowserWindow({show:false, width:302, height:1000, webPreferences:{contextIsolation:true,nodeIntegration:false}});
+      await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html || ''));
+      printWin.webContents.print({silent:true, printBackground:false, deviceName:printerName}, (success, reason) => {
+        if (printWin && !printWin.isDestroyed()) printWin.close();
+        resolve(success ? {ok:true} : {ok:false, reason:reason || 'print-failed'});
+      });
+    } catch (err) {
+      if (printWin && !printWin.isDestroyed()) printWin.close();
+      resolve({ok:false, reason:String(err.message || err)});
+    }
+  });
+});
+
 require('electron').ipcMain.handle('printer:list', () => listWindowsPrinters());
 
 require('electron').ipcMain.handle('printer:print', async (_event, { port, data }) => {
