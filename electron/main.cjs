@@ -26,7 +26,7 @@ async function loadDevUrl() { for (let n = 0; n < 30; n++) { if (!win || win.isD
 function isAllowedNavigation(url) { if (isDev && url.startsWith(DEV_URL)) return true; try { return new URL(url).protocol === LOCAL_SCHEME; } catch { return false; } }
 function createWindow() {
   log('[MK POS] creating BrowserWindow', { isDev, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node });
-  win = new BrowserWindow({ width: 1440, height: 900, minWidth: 1024, minHeight: 680, show: true, backgroundColor: '#f6f7fb', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: !isDev, webSecurity: true, allowRunningInsecureContent: false, devTools: true } });
+  win = new BrowserWindow({ width: 1440, height: 900, minWidth: 1024, minHeight: 680, show: true, backgroundColor: '#f6f7fb', autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, devTools: true } });
   win.on('closed', () => { log('[MK POS] main window closed'); win = null; });
   win.webContents.on('did-start-loading', () => log('[MK POS] renderer started loading', win.webContents.getURL()));
   win.webContents.on('dom-ready', () => log('[MK POS] renderer DOM ready', win.webContents.getURL()));
