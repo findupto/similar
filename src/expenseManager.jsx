@@ -1,7 +1,7 @@
 import React,{useMemo,useState} from 'react';
-import {Plus,Wallet,Receipt,Users,Lightbulb,Flame,Home,Car,ToolCase,MoreHorizontal} from 'lucide-react';
+import {Plus,Wallet,Receipt,Users,Lightbulb,Flame,Home,Car,Wrench,MoreHorizontal} from 'lucide-react';
 import {uid,today,money} from './posData';
-const CATEGORIES=[['Salaries','salary',Users],['Staff Advance','staff-advance',Users],['Electricity','electricity',Lightbulb],['Gas','gas',Flame],['Rent','rent',Home],['Transport','transport',Car],['Maintenance','maintenance',ToolCase],['Other','other',MoreHorizontal]];
+const CATEGORIES=[['Salaries','salary',Users],['Staff Advance','staff-advance',Users],['Electricity','electricity',Lightbulb],['Gas','gas',Flame],['Rent','rent',Home],['Transport','transport',Car],['Maintenance','maintenance',Wrench],['Other','other',MoreHorizontal]];
 const Panel=({title,children})=><section className="panel">{title&&<div className="panel-title"><h2>{title}</h2></div>}{children}</section>;
 const Table=({headers,rows})=><div className="table-wrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j}>{c}</td>)}</tr>):<tr><td colSpan={headers.length}><div className="empty">No records yet</div></td></tr>}</tbody></table></div>;
 const Stat=({title,value,icon:Icon})=><div className="stat"><div className="stat-icon"><Icon size={19}/></div><div><small>{title}</small><strong>{value}</strong></div></div>;
