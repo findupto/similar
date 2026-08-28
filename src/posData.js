@@ -15,5 +15,7 @@ export const variantsOf=p=>{const raw=Array.isArray(p?.variants)?p.variants:Arra
 export const hasVariants=p=>variantsOf(p).length>0;
 export const variantPrice=(p,v)=>Number(v?.price??p?.price??0);
 export const variantStock=(p,v)=>{const raw=v?.stock;if(raw===undefined||raw===null||String(raw).trim()==='')return Math.max(0,Number(p?.stock||0));return Math.max(0,Number(raw||0))};
-export const loadState=()=>{try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}};
-export const saveState=s=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}catch{}};
+
+const desktopDb=()=>typeof window!=='undefined'&&window.mkPosDesktop?.database?.loadState?window.mkPosDesktop.database:null;
+export const loadState=()=>{try{const db=desktopDb();const persisted=db?.loadState?.();if(persisted)return persisted;const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}}};
+export const saveState=s=>{try{const db=desktopDb();if(db?.saveState){const actor=s?.currentUser?.username||'system';db.saveState(s,actor);return}localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}catch{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}catch{}}};
