@@ -16,4 +16,4 @@ export const hasVariants=p=>variantsOf(p).length>0;
 export const variantPrice=(p,v)=>Number(v?.price??p?.price??0);
 export const variantStock=(p,v)=>{const raw=v?.stock;if(raw===undefined||raw===null||String(raw).trim()==='')return Math.max(0,Number(p?.stock||0));return Math.max(0,Number(raw||0))};
 export const loadState=()=>{try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch{return null}};
-export const saveState=s=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s));return true}catch{return false}};
+export const saveState=s=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}catch{}};
