@@ -143,10 +143,10 @@ require('electron').ipcMain.handle('printer:print-html', async (_event, { printe
 
 require('electron').ipcMain.handle('printer:list', () => listWindowsPrinters());
 
-require('electron').ipcMain.handle('printer:print', async (_event, { port, data }) => {
+require('electron').ipcMain.handle('printer:print', async (_event, { port, data, baudRate }) => {
   if (!port || process.platform !== 'win32') return { ok: false, reason: 'native-port-unavailable' };
   const encoded = Buffer.from(data, 'utf8').toString('base64');
-  const ps = `$b=[Convert]::FromBase64String('${encoded}'); $p=New-Object System.IO.Ports.SerialPort '${port}',9600,None,8,one; $p.Open(); $p.Write($b,0,$b.Length); $p.Close();`;
+  const rate = Number(baudRate) || 9600;\n  const ps = `$b=[Convert]::FromBase64String('${encoded}'); $p=New-Object System.IO.Ports.SerialPort '${port}',${rate},None,8,one; $p.ReadTimeout=250; $p.WriteTimeout=1000; $p.Open(); $p.Write($b,0,$b.Length); $p.BaseStream.Flush(); Start-Sleep -Milliseconds 15; $p.Close();`;
   return new Promise(resolve => execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command', ps], { windowsHide:true }, err => resolve(err ? {ok:false,reason:err.message} : {ok:true})));
 });
 
