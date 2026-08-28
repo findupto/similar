@@ -11,8 +11,11 @@ const db = {
 contextBridge.exposeInMainWorld('mkPosDesktop', {
   isDesktop: true,
   database: db,
-  ai: {
-    analyze: state => ipcRenderer.invoke('ai:analyze', { state })
+  ai: { analyze: state => ipcRenderer.invoke('ai:analyze', { state }) },
+  project: {
+    list: () => ipcRenderer.invoke('project:list'),
+    read: path => ipcRenderer.invoke('project:read', { path }),
+    write: (path, content) => ipcRenderer.invoke('project:write', { path, content })
   },
   diagnostics: () => ipcRenderer.invoke('app:diagnostics'),
   discoverPrinters: () => ipcRenderer.invoke('printer:list'),
