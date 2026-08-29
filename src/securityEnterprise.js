@@ -1,14 +1,23 @@
 import {uid,today} from './posData';
 
-export const PERMISSIONS=['pos.sell','pos.refund','pos.discount','cash.open','cash.close','cash.payout','inventory.receive','inventory.adjust','inventory.transfer','inventory.wastage','purchases.approve','reports.view','settings.manage','staff.manage','audit.view'];
-export const ROLE_DEFAULTS={admin:['*'],manager:PERMISSIONS.filter(p=>p!=='settings.manage'),cashier:['pos.sell','pos.discount','cash.open','cash.close'],inventory:['inventory.receive','inventory.adjust','inventory.transfer','inventory.wastage','reports.view'],accountant:['reports.view','purchases.approve']};
-export const hasPermission=(user,permission)=>{const p=user?.permissions||ROLE_DEFAULTS[user?.role]||[];return p.includes('*')||p.includes(permission)};
-export const requirePermission=(user,permission)=>{if(!hasPermission(user,permission))throw new Error(`Permission denied: ${permission}`);return true};
+export const PERMISSIONS=['pos.sell','pos.refund','pos.discount','pos.void','pos.price_override','cash.open','cash.close','cash.drop','cash.payout','inventory.receive','inventory.adjust','inventory.transfer','inventory.wastage','purchases.approve','reports.view','settings.manage','staff.manage','audit.view','orders.edit','orders.cancel'];
+export const ROLE_DEFAULTS={admin:['*'],manager:PERMISSIONS.filter(p=>p!=='settings.manage'),cashier:['pos.sell','pos.discount','cash.open','cash.close','orders.edit'],server:['pos.sell','orders.edit'],kitchen:[],inventory:['inventory.receive','inventory.adjust','inventory.transfer','inventory.wastage','reports.view'],accountant:['reports.view','purchases.approve']};
+export const createRole=({name='Custom',permissions=[]}={})=>({id:uid('ROLE'),name,permissions:[...new Set(permissions)],active:true});
+export const createUser=({name,username,role='cashier',permissions=null,locationIds=['MAIN']}={})=>({id:uid('USR'),name:name||'User',username:username||name||uid('LOGIN'),role,permissions,locationIds,status:'ACTIVE',createdAt:new Date().toISOString()});
+export const hasPermission=(user,permission,roles=[])=>{const custom=user?.permissions?.length?user.permissions:roles.find(r=>r.name===user?.role)?.permissions||ROLE_DEFAULTS[user?.role]||[];return custom.includes('*')||custom.includes(permission)};
+export const authorize=(user,permission,{locationId=null,roles=[]}={})=>({allowed:hasPermission(user,permission,roles),locationAllowed:!locationId||!user?.locationIds?.length||user.locationIds.includes(locationId),userId:user?.id||null,permission});
+export const requirePermission=(user,permission,context={})=>{const a=authorize(user,permission,context);if(!a.allowed||!a.locationAllowed)throw new Error(`Permission denied: ${permission}`);return true};
 export const createApproval=(type,payload,user,permission)=>({id:uid('APR'),date:today(),type,payload,status:'PENDING',requestedBy:user?.username||'system',permission});
 export const approveAction=(approval,user)=>({...approval,status:'APPROVED',approvedBy:user?.username||'system',approvedAt:new Date().toISOString()});
 export const rejectAction=(approval,user,reason='')=>({...approval,status:'REJECTED',rejectedBy:user?.username||'system',rejectedAt:new Date().toISOString(),reason});
 export const auditEvent=(action,user,meta={})=>({id:uid('AUD'),date:today(),timestamp:new Date().toISOString(),action,by:user?.username||'system',role:user?.role||'unknown',...meta});
 export const securityLog=(state,event)=>({...state,securityLog:[...(state.securityLog||[]),event],audit:[...(state.audit||[]),event]});
-export const sensitiveApproval=(type,amount)=>['REFUND','DISCOUNT','PAYOUT','STOCK_ADJUSTMENT'].includes(type)&&Number(amount||0)>0;
+export const sensitiveApproval=(type,amount)=>['REFUND','DISCOUNT','PAYOUT','STOCK_ADJUSTMENT','PRICE_OVERRIDE','VOID'].includes(type)&&Number(amount||0)>0;
+export const managerApproval=(action,{user,permission,reason='',amount=0}={})=>createApproval(action,{reason,amount},user,permission);
+export const sensitiveAction=(user,permission,{approvalRequired=false,approval=null,locationId=null,roles=[]}={})=>{const a=authorize(user,permission,{locationId,roles});return{...a,requiresApproval:approvalRequired,authorized:a.allowed&&a.locationAllowed||(approvalRequired&&approval?.status==='APPROVED'&&a.locationAllowed)}};
+export const sessionSecurity=({userId,deviceId='',locationId='MAIN'}={})=>({id:uid('SES'),userId,deviceId,locationId,loginAt:new Date().toISOString(),lastSeenAt:new Date().toISOString(),status:'ACTIVE'});
+export const touchSession=session=>({...session,lastSeenAt:new Date().toISOString()});
+export const revokeSession=(session,user)=>({...session,status:'REVOKED',revokedAt:new Date().toISOString(),revokedBy:user?.username||'system'});
+export const securitySummary=(users=[],audit=[],approvals=[])=>({users:users.length,activeUsers:users.filter(u=>u.status==='ACTIVE').length,auditEvents:audit.length,pendingApprovals:approvals.filter(a=>a.status==='PENDING').length});
 export const passwordPolicy={minLength:8,requireNumber:true,requireUppercase:true,requireSpecial:true};
 export const passwordMeetsPolicy=password=>{const s=String(password||'');return s.length>=8&&/[A-Z]/.test(s)&&/[0-9]/.test(s)&&/[^A-Za-z0-9]/.test(s)};
