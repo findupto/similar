@@ -1,30 +1,24 @@
 import fs from 'node:fs';
-
 const file='src/main.jsx';
 let text=fs.readFileSync(file,'utf8');
-
-// Repair the Orders payment modal markup before Vite parses JSX.
 text=text.replace('</button></div></div></Modal>}{edit&&<OrderEditor','</button></div></Modal>}{edit&&<OrderEditor');
-
-// POS: products with variants must always open the variant picker.
 const posStart=text.indexOf('function POS({state,setState,user}){');
 const ordersStart=text.indexOf('function Orders',posStart);
 if(posStart<0||ordersStart<0)throw new Error('Unable to locate POS function boundaries.');
 let pos=text.slice(posStart,ordersStart);
-
 const openStart=pos.indexOf('const openProduct=');
 const toggleStart=pos.indexOf('const toggleVariant=',openStart);
 if(openStart<0||toggleStart<0)throw new Error('Unable to locate POS variant handlers.');
 pos=pos.slice(0,openStart)+"const openProduct=p=>{const vs=variantsOf(p);if(vs.length){setVariantProduct(p);setSelectedVariants([]);return}setCart(c=>c.some(x=>x.id===p.id&&!x.variantId)?c.map(x=>x.id===p.id&&!x.variantId?{...x,qty:Math.min(stock(p,state),x.qty+1)}:x):[...c,{...p,qty:1,variantId:null,variantName:null,productId:p.id}]);};"+pos.slice(toggleStart);
-
-// Keep a parent product visible when any active variant has stock.
 const variantFilter='hasVariants(p)?variantsOf(p).some(v=>v?.active!==false&&variantStock(p,v)>0):stock(p,state)>0';
 const filterStart=pos.indexOf('hasVariants(p)?variantsOf(p).some(');
-if(filterStart>=0){
-  const filterEnd=pos.indexOf(')&&`',filterStart);
-  if(filterEnd>=0)pos=pos.slice(0,filterStart)+variantFilter+pos.slice(filterEnd);
-}
-
+if(filterStart>=0){const filterEnd=pos.indexOf(')&&`',filterStart);if(filterEnd>=0)pos=pos.slice(0,filterStart)+variantFilter+pos.slice(filterEnd)}
 text=text.slice(0,posStart)+pos+text.slice(ordersStart);
+text=text.replace("customers:due>0?s.customers.map(x=>x.id===checkout.customerId?{...x,balance:(+x.balance||0)+due}:x):s.customers,inventoryMoves:","customers:s.customers.map(x=>x.id===checkout.customerId?{...x,balance:due>0?(+x.balance||0)+due:(+x.balance||0),loyaltyPoints:Math.max(0,(+x.loyaltyPoints||+x.points||0)+Math.floor(grand/100))}:x),inventoryMoves:");
+text=text.replace(",customers:s.customers.map(x=>x.id===checkout.customerId?{...x,loyaltyPoints:Math.max(0,(+x.loyaltyPoints||0)+Math.floor(grand/100))}:x),tables:",",tables:");
 fs.writeFileSync(file,text);
-console.log('Applied POS variant-selection and JSX repair.');
+const cssFile='src/styles.css';
+let css=fs.readFileSync(cssFile,'utf8');
+if(!css.includes('/* PREMIUM_POS_V4 */')){css+=`\n/* PREMIUM_POS_V4 */\n.premium-pos{height:calc(100vh - 78px);background:linear-gradient(135deg,#f8fafc 0%,#f3f5f9 100%)}.premium-pos .catalog{padding:24px;overflow:auto}.pos-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px}.pos-hint{font-size:12px;color:#667085;white-space:nowrap}.premium-product-card{position:relative;min-height:112px;padding:14px;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.premium-product-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px #10182812}.product-card-copy{min-width:0;display:block}.product-card-copy b,.product-card-copy small,.product-card-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.variant-pill{position:absolute;right:10px;top:10px;padding:4px 7px;border-radius:999px;background:#fff1e8;color:#ea580c;font-size:9px;font-weight:800;letter-spacing:.5px}.premium-cart{box-shadow:-12px 0 35px #1018280b}.cart-clear{padding:6px 10px!important;border:1px solid #e4e7ec!important;border-radius:8px!important;color:#667085!important}.premium-cart-row{grid-template-columns:minmax(0,1fr) auto auto auto}.cart-item-main{min-width:0}.cart-item-main b{display:block;overflow:hidden;text-overflow:ellipsis}.cart-item-main small{display:block;color:#98a2b3;margin-top:4px}.premium-empty{margin:12px;border:1px dashed #d9dde5;border-radius:14px;min-height:180px!important}.premium-totals{background:#fafbfc;border:1px solid #edf0f3;border-radius:12px;padding:12px;margin-top:10px}.premium-pay{border-radius:11px;padding:14px;box-shadow:0 8px 18px #10182818}.variant-modal{display:flex;flex-direction:column;gap:14px}.variant-modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.variant-modal-head b{display:block;font-size:14px}.variant-modal-head small{display:block;color:#667085;margin-top:3px}.variant-search{width:210px;min-width:0;margin:0}.variant-search input{min-width:0}.premium-variant-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:390px;overflow:auto;padding:2px}.variant-option{position:relative;text-align:left;padding:14px;border:1px solid #e3e7ed;border-radius:12px;background:#fff;min-height:82px;display:flex;flex-direction:column;justify-content:space-between;gap:6px}.variant-option:hover{border-color:#f97316;box-shadow:0 5px 16px #1018280b}.variant-option.selected{border-color:#f97316;background:#fff7f1;box-shadow:0 0 0 2px #f9731620}.variant-option span{min-width:0}.variant-option b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis}.variant-option small{display:block;color:#667085;margin-top:3px}.variant-option strong{font-size:14px;color:#18202a}.variant-option em{position:absolute;right:10px;bottom:10px;font-size:11px;font-style:normal;font-weight:800;color:#ea580c}.variant-modal-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #edf0f3;padding-top:12px}.variant-modal-footer span{font-size:12px;color:#667085}@media(max-width:800px){.premium-pos{height:auto}.premium-variant-grid{grid-template-columns:1fr}.variant-modal-head{align-items:stretch;flex-direction:column}.variant-search{width:100%}}`;
+fs.writeFileSync(cssFile,css)}
+console.log('Applied POS variant-selection, payment integrity and premium cart styling.');
