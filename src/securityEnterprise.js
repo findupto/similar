@@ -11,4 +11,4 @@ export const auditEvent=(action,user,meta={})=>({id:uid('AUD'),date:today(),time
 export const securityLog=(state,event)=>({...state,securityLog:[...(state.securityLog||[]),event],audit:[...(state.audit||[]),event]});
 export const sensitiveApproval=(type,amount)=>['REFUND','DISCOUNT','PAYOUT','STOCK_ADJUSTMENT'].includes(type)&&Number(amount||0)>0;
 export const passwordPolicy={minLength:8,requireNumber:true,requireUppercase:true,requireSpecial:true};
-export const passwordMeetsPolicy=password=>{const s=String(password||'');return s.length>=8/&&/[A-Z]/.test(s)&&/[0-9]/.test(s)&&/[^A-Za-z0-9]/.test(s)};
+export const passwordMeetsPolicy=password=>{const s=String(password||'');return s.length>=8&&/[A-Z]/.test(s)&&/[0-9]/.test(s)&&/[^A-Za-z0-9]/.test(s)};
