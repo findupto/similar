@@ -3,37 +3,27 @@ import fs from 'node:fs';
 const file='src/main.jsx';
 let text=fs.readFileSync(file,'utf8');
 
-// Repair the existing Orders payment modal markup before Vite parses JSX.
-// The generated source had one extra closing div immediately before the
-// OrderEditor modal, which causes esbuild to stop before POS can load.
+// Repair the Orders payment modal markup before Vite parses JSX.
 text=text.replace('</button></div></div></Modal>}{edit&&<OrderEditor','</button></div></Modal>}{edit&&<OrderEditor');
 
-// Keep the POS variant selector authoritative: a product with variants must
-// open the selector instead of being added as the parent product.
+// POS: products with variants must always open the variant picker.
 const posStart=text.indexOf('function POS({state,setState,user}){');
 const ordersStart=text.indexOf('function Orders',posStart);
 if(posStart<0||ordersStart<0)throw new Error('Unable to locate POS function boundaries.');
 let pos=text.slice(posStart,ordersStart);
 
-// Barcode/SKU scans and normal product clicks should use the same variant flow.
-pos=pos.replace(
-  /const openProduct=[\\s\\S]*?;const items=/,
-  "const openProduct=p=>{const vs=variantsOf(p);if(vs.length){setVariantProduct(p);setSelectedVariants([]);return}addLine(p,null,1)};const items="
-);
+const openStart=pos.indexOf('const openProduct=');
+const toggleStart=pos.indexOf('const toggleVariant=',openStart);
+if(openStart<0||toggleStart<0)throw new Error('Unable to locate POS variant handlers.');
+pos=pos.slice(0,openStart)+"const openProduct=p=>{const vs=variantsOf(p);if(vs.length){setVariantProduct(p);setSelectedVariants([]);return}setCart(c=>c.some(x=>x.id===p.id&&!x.variantId)?c.map(x=>x.id===p.id&&!x.variantId?{...x,qty:Math.min(stock(p,state),x.qty+1)}:x):[...c,{...p,qty:1,variantId:null,variantName:null,productId:p.id}]);};"+pos.slice(toggleStart);
 
-if(!pos.includes('const openProduct=p=>')){
-  const marker='const items=';
-  const at=pos.indexOf(marker);
-  if(at<0)throw new Error('Unable to locate POS product list.');
-  pos=pos.slice(0,at)+"const openProduct=p=>{const vs=variantsOf(p);if(vs.length){setVariantProduct(p);setSelectedVariants([]);return}addLine(p,null,1)};"+pos.slice(at);
+// Keep a parent product visible when any active variant has stock.
+const variantFilter='hasVariants(p)?variantsOf(p).some(v=>v?.active!==false&&variantStock(p,v)>0):stock(p,state)>0';
+const filterStart=pos.indexOf('hasVariants(p)?variantsOf(p).some(');
+if(filterStart>=0){
+  const filterEnd=pos.indexOf(')&&`',filterStart);
+  if(filterEnd>=0)pos=pos.slice(0,filterStart)+variantFilter+pos.slice(filterEnd);
 }
-
-// A parent product with variants should remain visible when any active
-// variant has stock, even if the parent stock field itself is zero.
-pos=pos.replace(
-  /hasVariants\(p\)\?variantsOf\(p\)\.some\(v=>v\?\.active!==false&&variantStock\(p,v\)>0\):stock\(p,state\)>0/,
-  'hasVariants(p)?variantsOf(p).some(v=>v?.active!==false&&variantStock(p,v)>0):stock(p,state)>0'
-);
 
 text=text.slice(0,posStart)+pos+text.slice(ordersStart);
 fs.writeFileSync(file,text);
