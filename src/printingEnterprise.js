@@ -1,0 +1,14 @@
+import {uid} from './posData';
+
+export const PAPER_WIDTHS={THERMAL_58:58,THERMAL_80:80,A4:210};
+export const PRINTER_TYPES=['RECEIPT','KITCHEN','CUSTOMER_DISPLAY','INVOICE'];
+export const createPrinterProfile=(data={})=>({id:uid('PRN'),name:data.name||'New Printer',type:data.type||'RECEIPT',width:data.width||80,connection:data.connection||'SYSTEM',address:data.address||'',active:data.active!==false,copies:Number(data.copies)||1});
+export const formatMoney=(value,currency='$')=>`${currency}${Number(value||0).toFixed(2)}`;
+export const receiptData=(sale,{businessName='Business',currency='$',footer='Thank you!'}={})=>({businessName,orderNo:sale?.orderNo||sale?.id||'',date:sale?.date||new Date().toISOString(),customer:sale?.customer||'',items:(sale?.items||[]).map(i=>({name:i.name||i.productName,qty:Number(i.qty||0),price:Number(i.price||0),total:Number(i.qty||0)*Number(i.price||0)})),subtotal:Number(sale?.subtotal||0),discount:Number(sale?.discount||0),tax:Number(sale?.tax||0),total:Number(sale?.total||0),payments:sale?.payments||[],footer});
+export const thermalReceipt=(data,width=80)=>{const line='-'.repeat(width===58?32:46);const lines=[data.businessName,data.orderNo,data.date,line];for(const i of data.items)lines.push(`${i.name} x${i.qty}  ${formatMoney(i.total)}`);lines.push(line,`Subtotal ${formatMoney(data.subtotal)}`,`Discount ${formatMoney(data.discount)}`,`Tax ${formatMoney(data.tax)}`,`TOTAL ${formatMoney(data.total)}`,...(data.payments||[]).map(p=>`${p.method} ${formatMoney(p.amount)}`),line,data.footer);return lines.join('\n')};
+export const invoiceData=(sale,company={})=>({...receiptData(sale,company),invoiceNo:sale?.invoiceNo||`INV-${sale?.id||Date.now()}`,company:{name:company.businessName||'Business',address:company.address||'',phone:company.phone||'',taxId:company.taxId||''}});
+export const kitchenTicketData=(ticket)=>({ticketNo:ticket?.orderNo||ticket?.id||'',table:ticket?.table||'',customer:ticket?.customer||'',priority:ticket?.priority||'NORMAL',items:(ticket?.items||[]).filter(i=>i.status!=='VOID').map(i=>({name:i.name||i.productName,qty:i.qty,station:i.station||'PACK',notes:i.notes||''}))});
+export const customerDisplayData=sale=>({orderNo:sale?.orderNo||sale?.id||'',items:(sale?.items||[]).map(i=>({name:i.name||i.productName,qty:i.qty,total:Number(i.qty||0)*Number(i.price||0)})),total:Number(sale?.total||0),status:sale?.status||'IN PROGRESS'});
+export const printJob=(type,payload,printerId,copies=1)=>({id:uid('PRINT'),type,payload,printerId,copies:Number(copies)||1,status:'QUEUED',createdAt:new Date().toISOString()});
+export const printerJobs=(jobs,printerId)=> (jobs||[]).filter(j=>j.printerId===printerId&&j.status==='QUEUED');
+export const markPrinted=(job,user)=>({...job,status:'PRINTED',printedAt:new Date().toISOString(),printedBy:user?.username||'system'});
