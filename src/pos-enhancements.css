@@ -52,3 +52,10 @@ table tbody tr:hover td{background:#fffaf6}
 .split-pay-row select,.split-pay-row input{min-width:0}
 .split-pay-row .link{padding:6px 4px}
 @media(max-width:600px){.split-pay-row{grid-template-columns:1fr 1fr}.split-pay-row .link{grid-column:1/-1;justify-self:end}}
+
+.table-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));margin-top:18px}
+.kds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px}
+.kds-card{display:flex;flex-direction:column;gap:9px}
+.kds-card small{color:#667085}
+.kds-item{padding:10px 12px;border:1px solid #eaecf0;border-radius:10px;background:#fafafa;font-weight:650}
+.table-grid .product-card strong{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
