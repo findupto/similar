@@ -12,7 +12,7 @@
     "build": "npm run features:apply && vite build",
     "verify:production": "node scripts/production-check.mjs",
     "features:apply": "node scripts/apply-menu-features.mjs",
-    "electron:dev": "concurrently -k \"npm run web:dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "electron:dev": "npx concurrently -k \"npm run web:dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "dist": "npm run verify:production && npm run build && electron-builder --win nsis",
     "dist:portable": "npm run verify:production && npm run build && electron-builder --win portable",
     "dist:installer": "npm run verify:production && npm run build && electron-builder --win nsis",
@@ -39,33 +39,11 @@
     "artifactName": "Findupto-AI-POS-${version}-${arch}.${ext}",
     "asar": true,
     "npmRebuild": false,
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "src/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "artifactName": "Findupto-AI-POS-${version}-${arch}-Setup.exe",
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Findupto AI POS",
-      "include": "build/installer.nsh"
-    },
-    "portable": {
-      "artifactName": "Findupto-AI-POS-${version}-${arch}-Portable.exe"
-    }
+    "files": ["dist/**/*", "electron/**/*", "src/**/*", "package.json"],
+    "directories": {"output": "release"},
+    "win": {"target": "nsis"},
+    "nsis": {"artifactName": "Findupto-AI-POS-${version}-${arch}-Setup.exe", "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Findupto AI POS", "include": "build/installer.nsh"},
+    "portable": {"artifactName": "Findupto-AI-POS-${version}-${arch}-Portable.exe"}
   },
-  "engines": {
-    "node": ">=20 <25"
-  }
+  "engines": {"node": ">=20 <25"}
 }
