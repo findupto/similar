@@ -1,0 +1,20 @@
+import {uid} from './posData';
+
+export const TABLE_STATUSES=['AVAILABLE','SEATED','ORDERING','DINING','BILL_REQUESTED','DIRTY','RESERVED','BLOCKED'];
+export const createDiningSection=({name='Main Dining',floor=1,sortOrder=0}={})=>({id:uid('SEC'),name,floor,sortOrder,active:true});
+export const createDiningTable=({name='Table',sectionId=null,capacity=2,x=0,y=0,shape='RECTANGLE'}={})=>({id:uid('TBL'),name,sectionId,capacity:Number(capacity)||2,x:Number(x)||0,y:Number(y)||0,shape,status:'AVAILABLE',orderId:null,active:true});
+export const setTableStatus=(table,status)=>TABLE_STATUSES.includes(status)?{...table,status,updatedAt:new Date().toISOString()}:table;
+export const seatTable=(table,{orderId,partySize=1,customerId=null}={})=>({...table,status:'SEATED',orderId,partySize:Number(partySize)||1,customerId,seatedAt:new Date().toISOString()});
+export const clearTable=table=>({...table,status:'DIRTY',orderId:null,customerId:null,partySize:0,clearedAt:new Date().toISOString()});
+export const cleanTable=table=>({...table,status:'AVAILABLE',orderId:null,customerId:null,partySize:0,cleanedAt:new Date().toISOString()});
+export const mergeTables=(tables=[],tableIds=[])=>{const selected=tables.filter(t=>tableIds.includes(t.id));return{tableIds:selected.map(t=>t.id),name:selected.map(t=>t.name).join(' + '),capacity:selected.reduce((s,t)=>s+Number(t.capacity||0),0),status:selected.some(t=>t.status==='SEATED'||t.status==='DINING')?'DINING':'AVAILABLE',orderId:selected.find(t=>t.orderId)?.orderId||null}};
+export const transferOrder=(order,fromTableId,toTableId)=>({...order,tableId:toTableId,previousTableId:fromTableId,tableTransferredAt:new Date().toISOString()});
+export const splitOrder=(order,groups=[])=>(groups||[]).map((items,index)=>({...order,id:uid('SPL'),orderNo:`${order.orderNo}-${index+1}`,parentOrderId:order.id,items,total:items.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0),splitIndex:index+1,status:'OPEN',createdAt:new Date().toISOString()}));
+export const createReservation=({customerId,customerName,phone='',dateTime,partySize=2,tableId=null,notes=''}={})=>({id:uid('RSV'),customerId,customerName:customerName||'',phone,partySize:Number(partySize)||2,dateTime,tableId,notes,status:'BOOKED',createdAt:new Date().toISOString()});
+export const updateReservation=(reservation,status,tableId=null)=>({...reservation,status,tableId:tableId||reservation.tableId,updatedAt:new Date().toISOString()});
+export const availableTables=(tables=[],partySize=1)=>tables.filter(t=>t.active!==false&&t.status==='AVAILABLE'&&Number(t.capacity||0)>=Number(partySize||1));
+export const floorPlan=(sections=[],tables=[])=>sections.filter(s=>s.active!==false).sort((a,b)=>a.sortOrder-b.sortOrder).map(s=>({...s,tables:tables.filter(t=>t.sectionId===s.id&&t.active!==false)}));
+export const tableServiceSummary=(tables=[],reservations=[])=>({total:tables.filter(t=>t.active!==false).length,available:tables.filter(t=>t.status==='AVAILABLE').length,seated:tables.filter(t=>['SEATED','ORDERING','DINING','BILL_REQUESTED'].includes(t.status)).length,dirty:tables.filter(t=>t.status==='DIRTY').length,reserved:reservations.filter(r=>r.status==='BOOKED').length});
+export const createCourse=({name='Course',sortOrder=0}={})=>({id:uid('CRS'),name,sortOrder,status:'OPEN',items:[]});
+export const addCourseItem=(course,item)=>({...course,items:[...(course.items||[]),item]});
+export const closeCourse=course=>({...course,status:'SERVED',servedAt:new Date().toISOString()});
