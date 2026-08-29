@@ -17,8 +17,7 @@
     "dist:portable": "npm run verify:production && npm run build && electron-builder --win portable",
     "dist:installer": "npm run verify:production && npm run build && electron-builder --win nsis",
     "dist:x64": "npm run verify:production && npm run build && electron-builder --win nsis --x64",
-    "dist:portable:x64": "npm run verify:production && npm run build && electron-builder --win portable --x64",
-    "postinstall": "electron-builder install-app-deps"
+    "dist:portable:x64": "npm run verify:production && npm run build && electron-builder --win portable --x64"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
@@ -29,7 +28,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "electron": "^34.3.3",
+    "electron": "35.7.5",
     "electron-builder": "25.1.8",
     "vite": "6.1.0",
     "wait-on": "8.0.2"
@@ -39,6 +38,7 @@
     "productName": "Findupto AI POS",
     "artifactName": "Findupto-AI-POS-${version}-${arch}.${ext}",
     "asar": true,
+    "npmRebuild": false,
     "files": [
       "dist/**/*",
       "electron/**/*",
