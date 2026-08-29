@@ -1,0 +1,14 @@
+import {uid} from './posData';
+
+export const LOCATION_TYPES=['STORE','WAREHOUSE','KIOSK'];
+export const createLocation=({name,type='STORE',code='',address='',currency='USD',timezone='',taxProfileId=null}={})=>({id:uid('LOC'),name:name||'New Location',type,code:code||name?.toUpperCase().replace(/\W+/g,'-')||'MAIN',address,currency,timezone,taxProfileId,active:true,createdAt:new Date().toISOString()});
+export const createWarehouse=({locationId,name='Warehouse'}={})=>({id:uid('WH'),locationId,name,active:true,createdAt:new Date().toISOString()});
+export const createRegister=({locationId,name='Register',currency='USD'}={})=>({id:uid('REG'),locationId,name,currency,status:'CLOSED',assignedEmployeeId:null});
+export const createTransfer=({fromLocationId,toLocationId,items=[],user,note=''}={})=>({id:uid('TRF'),transferNo:`TR-${Date.now().toString(36).toUpperCase()}`,fromLocationId,toLocationId,items:items.map(i=>({...i,quantity:Number(i.quantity||i.qty)||0,receivedQty:0})),status:'DRAFT',note,createdBy:user?.username||'system',createdAt:new Date().toISOString()});
+export const approveTransfer=(transfer,user)=>({...transfer,status:'IN_TRANSIT',approvedBy:user?.username||'system',approvedAt:new Date().toISOString()});
+export const receiveTransfer=(transfer,received,user)=>{const items=transfer.items.map(i=>{const r=received.find(x=>x.itemId===i.id||x.productId===i.productId);return{...i,receivedQty:Math.min(i.quantity,i.receivedQty+(Number(r?.quantity)||0))}});return{...transfer,items,status:items.every(i=>i.receivedQty>=i.quantity)?'RECEIVED':'PARTIAL',receivedBy:user?.username||'system',receivedAt:new Date().toISOString()}};
+export const locationPrice=(prices,{productId,locationId}={})=>(prices||[]).find(p=>p.productId===productId&&p.locationId===locationId&&p.active!==false)?.price??null;
+export const locationTax=(taxes,{taxProfileId,code}={})=>(taxes||[]).find(t=>(!taxProfileId||t.taxProfileId===taxProfileId)&&(!code||t.code===code)&&t.active!==false)?.rate??0;
+export const consolidatedSales=(sales,locations)=>{const allowed=new Set((locations||[]).filter(l=>l.active!==false).map(l=>l.id));return(sales||[]).filter(s=>!s.locationId||allowed.has(s.locationId)).reduce((a,s)=>{const k=s.locationId||'MAIN';a[k]??={locationId:k,orders:0,revenue:0,tax:0};a[k].orders++;a[k].revenue+=Number(s.total||0);a[k].tax+=Number(s.tax||0);return a},{});};
+export const stockByLocation=(stock,locations)=>Object.values((stock||[]).reduce((a,s)=>{const k=s.locationId||'MAIN';a[k]??={locationId:k,items:0,value:0};a[k].items+=Number(s.quantity||0);a[k].value+=Number(s.quantity||0)*Number(s.cost||0);return a},{}));
+export const locationDashboard=(sales,stock,locations)=>({locations:(locations||[]).filter(l=>l.active!==false).map(l=>({location:l,sales:consolidatedSales(sales,[l])[l.id]||{locationId:l.id,orders:0,revenue:0,tax:0},stock:stockByLocation(stock,[l]).find(x=>x.locationId===l.id)||{locationId:l.id,items:0,value:0}}))});
