@@ -45,3 +45,10 @@ table tbody tr:hover td{background:#fffaf6}
 .empty{border:1px dashed #d8dee8;border-radius:12px;background:linear-gradient(180deg,#fff,#fafbfc)}
 @media(max-width:900px){.panel{box-shadow:0 6px 24px rgba(16,24,40,.07)}.product-card{min-height:104px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.split-pay-head{display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px}
+.split-pay-head button{border:1px solid #e4e7ec;background:#fff;border-radius:9px;padding:7px 10px;font-weight:700;cursor:pointer}
+.split-pay-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin:7px 0}
+.split-pay-row select,.split-pay-row input{min-width:0}
+.split-pay-row .link{padding:6px 4px}
+@media(max-width:600px){.split-pay-row{grid-template-columns:1fr 1fr}.split-pay-row .link{grid-column:1/-1;justify-self:end}}
